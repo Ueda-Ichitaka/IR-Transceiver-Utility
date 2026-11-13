@@ -1,0 +1,7 @@
+# elk-probe identify
+# device: 045c:0132 Smart IR Blaster bus 003 addr 14 serial 030820250001
+# endpoints: out 0x02 in 0x82
+# read timeouts (not listed): 1
+   0.010  OUT  FC FC FC FC
+   0.010  IN   FC FC FC FC 70 01
+# protocol: Plain

@@ -1,0 +1,17 @@
+# Cargo workspace for the IR Transceiver Utility.
+#
+# Groups the crates that make up the app: the pure protocol crate (elk-proto)
+# and the USB transport crate (ir-transport, which also builds the elk-probe
+# tool). Shared package metadata and dependency versions live here.
+[workspace]
+resolver = "3"
+members = ["crates/elk-proto", "crates/ir-transport"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+elk-proto = { path = "crates/elk-proto" }
+nusb = "0.2.9"

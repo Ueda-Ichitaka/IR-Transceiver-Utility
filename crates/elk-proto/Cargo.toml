@@ -1,0 +1,11 @@
+# elk-proto - wire protocol of the ELK Smart USB IR dongle (045c:0132).
+#
+# Pure Rust, no I/O and no dependencies, so every protocol rule can be unit
+# tested without hardware.
+[package]
+name = "elk-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]

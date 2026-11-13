@@ -1,0 +1,14 @@
+# ir-transport - USB transport for the ELK Smart IR dongle, plus the elk-probe tool.
+#
+# Wraps bulk transfers behind a Transport trait so protocol operations can be
+# tested against a scripted mock, and provides the nusb-backed implementation
+# and the elk-probe binary that records raw traffic as test fixtures.
+[package]
+name = "ir-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+elk-proto.workspace = true
+nusb.workspace = true
