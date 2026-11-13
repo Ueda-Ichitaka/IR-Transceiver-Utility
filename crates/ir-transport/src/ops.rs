@@ -1,7 +1,8 @@
-//! Dongle operations built on `Transport`: identify and learn.
+//! Dongle operations built on `Transport`: identify, learn and transmit.
 //!
 //! Exists to implement the command/response sequences of elksmart-comm.c
-//! (`send_identify`, `send_learn`/`recv_learn`) once, against the trait, so
+//! (`send_identify`, `send_learn`/`recv_learn`, `send_transmit`) once,
+//! against the trait, so
 //! the probe tool and later the app session share tested logic. Waiting is
 //! expressed as counts of read timeouts so tests are deterministic.
 
@@ -11,6 +12,8 @@ use std::time::Duration;
 use elk_proto::command;
 use elk_proto::identify::{self, Protocol};
 use elk_proto::learn::{LearnAssembler, LearnError, LearnedCode, Progress};
+use elk_proto::pulse::Pulse;
+use elk_proto::transmit::{self, TransmitError};
 
 use crate::transport::{Transport, TransportError};
 
@@ -26,6 +29,8 @@ pub const IDENTIFY_TIMEOUT: Duration = Duration::from_millis(500);
 pub const IDENTIFY_ATTEMPTS: usize = 4;
 /// Timeout for each read while learning.
 pub const LEARN_READ_TIMEOUT: Duration = Duration::from_millis(100);
+/// Pause after each transmit chunk.
+pub const CHUNK_PAUSE: Duration = Duration::from_millis(2);
 
 /// How long `learn` waits, in units of [`LEARN_READ_TIMEOUT`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +60,7 @@ pub enum OpError {
     /// The identify reply was not recognised; carries the reply.
     UnknownIdentify(Vec<u8>),
     Learn(LearnError),
+    Transmit(TransmitError),
 }
 
 impl fmt::Display for OpError {
@@ -64,6 +70,10 @@ impl fmt::Display for OpError {
             OpError::UnknownIdentify(b) => write!(f, "unknown identify reply ({} bytes)", b.len()),
             OpError::Learn(LearnError::UnexpectedResponse(b)) => {
                 write!(f, "unexpected learn response ({} bytes)", b.len())
+            }
+            OpError::Transmit(TransmitError::Empty) => write!(f, "nothing to transmit"),
+            OpError::Transmit(TransmitError::TooLong(n)) => {
+                write!(f, "code too long to transmit ({n} bytes compressed)")
             }
         }
     }
@@ -131,6 +141,22 @@ pub fn learn(t: &mut impl Transport, cfg: LearnConfig) -> Result<LearnOutcome, O
             Err(e) => return Err(e.into()),
         }
     }
+}
+
+/// Sends pulses at the given carrier frequency. `pause` is called after
+/// every chunk with [`CHUNK_PAUSE`] (pass `std::thread::sleep` in production).
+pub fn transmit(
+    t: &mut impl Transport,
+    frequency_hz: u32,
+    pulses: &[Pulse],
+    pause: &mut dyn FnMut(Duration),
+) -> Result<(), OpError> {
+    let chunks = transmit::transmit_chunks(frequency_hz, pulses).map_err(OpError::Transmit)?;
+    for chunk in &chunks {
+        t.write(chunk, WRITE_TIMEOUT)?;
+        pause(CHUNK_PAUSE);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -268,6 +294,27 @@ mod tests {
         assert_eq!(
             learn(&mut m, cfg),
             Ok(LearnOutcome::Complete(LearnedCode { announced_len: 1, data: vec![9] }))
+        );
+    }
+
+    #[test]
+    fn transmit_writes_all_chunks_with_pauses() {
+        let pulses: Vec<Pulse> = elk_proto::nec::encode(&[0x00, 0x59, 0x00, 0x59]).unwrap();
+        let chunks = transmit::transmit_chunks(38000, &pulses).unwrap();
+        assert!(chunks.len() > 1);
+        let mut m = MockTransport::new(chunks.iter().cloned().map(Step::ExpectWrite));
+        let mut pauses = Vec::new();
+        transmit(&mut m, 38000, &pulses, &mut |d| pauses.push(d)).unwrap();
+        assert!(m.is_done());
+        assert_eq!(pauses, vec![CHUNK_PAUSE; chunks.len()]);
+    }
+
+    #[test]
+    fn transmit_empty_is_error_and_writes_nothing() {
+        let mut m = MockTransport::new([]);
+        assert_eq!(
+            transmit(&mut m, 38000, &[], &mut |_| {}),
+            Err(OpError::Transmit(TransmitError::Empty))
         );
     }
 
