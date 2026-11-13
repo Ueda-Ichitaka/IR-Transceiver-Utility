@@ -6,6 +6,8 @@
 //! Modules:
 //! - [`budget`]: memory budget for captured data, from /proc/meminfo
 //! - [`capture`]: capture buffer bounded by a byte budget
+//! - [`session`]: the state machine over one dongle connection
 
 pub mod budget;
 pub mod capture;
+pub mod session;
