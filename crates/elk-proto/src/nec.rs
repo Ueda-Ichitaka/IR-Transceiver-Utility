@@ -43,11 +43,12 @@ pub const TOLERANCE_PERCENT: u32 = 30;
 
 /// Encodes one frame per (address, command) pair in `pairs`.
 pub fn encode(pairs: &[u8], order: BitOrder) -> Result<Vec<Pulse>, NecError> {
-    if !pairs.len().is_multiple_of(2) {
+    if pairs.len() % 2 != 0 {
         return Err(NecError::OddLength);
     }
     let mut pulses = Vec::with_capacity(pairs.len() / 2 * 34);
-    for &[addr, cmd] in pairs.as_chunks::<2>().0 {
+    for pair in pairs.chunks_exact(2) {
+        let (addr, cmd) = (pair[0], pair[1]);
         pulses.push(Pulse { on_us: 8500, off_us: 4250 });
         for byte in [addr, !addr, cmd, !cmd] {
             let byte = match order {

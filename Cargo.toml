@@ -12,6 +12,8 @@ members = ["crates/elk-proto", "crates/ir-codec", "crates/ir-session", "crates/i
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+# Debian stable (trixie) ships rustc 1.85.
+rust-version = "1.85"
 
 [workspace.dependencies]
 elk-proto = { path = "crates/elk-proto" }
