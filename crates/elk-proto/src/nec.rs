@@ -49,20 +49,36 @@ pub fn encode(pairs: &[u8], order: BitOrder) -> Result<Vec<Pulse>, NecError> {
     let mut pulses = Vec::with_capacity(pairs.len() / 2 * 34);
     for pair in pairs.chunks_exact(2) {
         let (addr, cmd) = (pair[0], pair[1]);
-        pulses.push(Pulse { on_us: 8500, off_us: 4250 });
-        for byte in [addr, !addr, cmd, !cmd] {
-            let byte = match order {
-                BitOrder::MsbFirst => byte,
-                BitOrder::LsbFirst => byte.reverse_bits(),
-            };
-            for bit in (0..8).rev() {
-                let off_us = if byte >> bit & 1 == 1 { 1650 } else { 550 };
-                pulses.push(Pulse { on_us: 550, off_us });
-            }
-        }
-        pulses.push(Pulse { on_us: 550, off_us: 25000 });
+        push_frame(&mut pulses, [addr, !addr, cmd, !cmd], order);
     }
     Ok(pulses)
+}
+
+/// Appends leader, the four bytes and the stop pulse.
+fn push_frame(pulses: &mut Vec<Pulse>, bytes: [u8; 4], order: BitOrder) {
+    pulses.push(Pulse { on_us: 8500, off_us: 4250 });
+    for byte in bytes {
+        let byte = match order {
+            BitOrder::MsbFirst => byte,
+            BitOrder::LsbFirst => byte.reverse_bits(),
+        };
+        for bit in (0..8).rev() {
+            let off_us = if byte >> bit & 1 == 1 { 1650 } else { 550 };
+            pulses.push(Pulse { on_us: 550, off_us });
+        }
+    }
+    pulses.push(Pulse { on_us: 550, off_us: 25000 });
+}
+
+/// Encodes one standard (LSB first) frame for a decoded command, the
+/// inverse of [`decode`]: with `extended`, `address` supplies both address
+/// bytes (low byte first); otherwise the low byte and its complement.
+pub fn encode_command(address: u16, command: u8, extended: bool) -> Vec<Pulse> {
+    let [low, high] = address.to_le_bytes();
+    let second = if extended { high } else { !low };
+    let mut pulses = Vec::with_capacity(34);
+    push_frame(&mut pulses, [low, second, command, !command], BitOrder::LsbFirst);
+    pulses
 }
 
 /// Decodes one frame (as split by [`crate::frames::split`]). The off-time of
@@ -192,6 +208,14 @@ mod tests {
     fn decode_extended_address() {
         let f = raw_frame([0x12, 0x34, 0x59, 0xA6], 560, 560, 1690);
         assert_eq!(decode(&f), Some(NecFrame::Command { address: 0x3412, command: 0x59, extended: true }));
+    }
+
+    #[test]
+    fn encode_command_round_trips_through_decode() {
+        for (address, extended) in [(0x00u16, false), (0x04, false), (0x3412, true)] {
+            let frame = encode_command(address, 0x59, extended);
+            assert_eq!(decode(&frame), Some(NecFrame::Command { address, command: 0x59, extended }));
+        }
     }
 
     #[test]
