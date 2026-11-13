@@ -5,5 +5,7 @@
 //!
 //! Modules:
 //! - [`model`]: codes, payload kinds and the TOML file format
+//! - [`store`]: file location, atomic saving and recovery from damaged files
 
 pub mod model;
+pub mod store;
