@@ -2,11 +2,12 @@
 #
 # Groups the crates that make up the app: the pure protocol crate (elk-proto),
 # the byte encodings (ir-codec), the USB transport crate (ir-transport, which
-# also builds the elk-probe tool) and the device session (ir-session).
+# also builds the elk-probe tool), the device session (ir-session) and the
+# Kirigami GUI (ir-app).
 # Shared package metadata and dependency versions live here.
 [workspace]
 resolver = "3"
-members = ["crates/elk-proto", "crates/ir-codec", "crates/ir-session", "crates/ir-transport"]
+members = ["crates/elk-proto", "crates/ir-app", "crates/ir-codec", "crates/ir-session", "crates/ir-transport"]
 
 [workspace.package]
 version = "0.1.0"
@@ -21,3 +22,4 @@ nusb = "0.2.9"
 base64 = "0.23.1"
 ir-codec = { path = "crates/ir-codec" }
 ir-transport = { path = "crates/ir-transport" }
+ir-session = { path = "crates/ir-session" }
