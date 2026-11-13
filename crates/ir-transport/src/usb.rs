@@ -1,6 +1,7 @@
 //! `UsbTransport`: the nusb-backed `Transport` for the real dongle.
 //!
-//! Exists to do the actual USB work: find the 045c:0132, claim interface 0
+//! Exists to do the actual USB work: find supported dongles (vendor 045c,
+//! products 0132, 0195, 0184, 0134), claim interface 0
 //! (detaching a kernel driver if one is bound), pick the bulk endpoints from
 //! the interface descriptor and run blocking bulk transfers with timeouts.
 //! Only exercised against hardware (elk-probe), not by unit tests.
@@ -16,12 +17,19 @@ use crate::endpoints::{self, EndpointError, EndpointInfo, Endpoints, Kind};
 use crate::transport::{Transport, TransportError};
 
 pub const VENDOR_ID: u16 = 0x045C;
-pub const PRODUCT_ID: u16 = 0x0132;
+/// Supported product ids: 0132, EKX4S (0195), EKX5S-T (0184), EKX5S (0134).
+pub const PRODUCT_IDS: [u16; 4] = [0x0132, 0x0195, 0x0184, 0x0134];
 pub const INTERFACE: u8 = 0;
 
-/// Identifying details of the opened device.
-#[derive(Debug, Clone)]
+/// True for a supported ELK Smart dongle.
+pub fn is_supported(vendor_id: u16, product_id: u16) -> bool {
+    vendor_id == VENDOR_ID && PRODUCT_IDS.contains(&product_id)
+}
+
+/// Identifying details of a dongle.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceSummary {
+    pub product_id: u16,
     pub bus_id: String,
     pub address: u8,
     pub serial: Option<String>,
@@ -40,7 +48,7 @@ pub enum OpenError {
 impl fmt::Display for OpenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OpenError::NotFound => write!(f, "no {VENDOR_ID:04x}:{PRODUCT_ID:04x} device found"),
+            OpenError::NotFound => write!(f, "no supported ELK Smart dongle found"),
             OpenError::Usb(msg) => write!(f, "USB error: {msg}"),
             OpenError::NoInterfaceDescriptor => write!(f, "interface {INTERFACE} has no descriptor"),
             OpenError::Descriptor(e) => write!(f, "unexpected interface layout: {e:?}"),
@@ -60,21 +68,50 @@ pub struct UsbTransport {
     pub endpoints: Endpoints,
 }
 
+fn usb_err(e: nusb::Error) -> OpenError {
+    OpenError::Usb(e.to_string())
+}
+
+fn summary(info: &nusb::DeviceInfo) -> DeviceSummary {
+    DeviceSummary {
+        product_id: info.product_id(),
+        bus_id: info.bus_id().to_string(),
+        address: info.device_address(),
+        serial: info.serial_number().map(str::to_string),
+        product: info.product_string().map(str::to_string),
+    }
+}
+
+fn supported_devices() -> Result<Vec<nusb::DeviceInfo>, OpenError> {
+    Ok(nusb::list_devices()
+        .wait()
+        .map_err(usb_err)?
+        .filter(|d| is_supported(d.vendor_id(), d.product_id()))
+        .collect())
+}
+
+/// Lists all connected supported dongles, in enumeration order.
+pub fn list() -> Result<Vec<DeviceSummary>, OpenError> {
+    Ok(supported_devices()?.iter().map(summary).collect())
+}
+
 impl UsbTransport {
-    /// Opens the first 045c:0132 found.
+    /// Opens the first supported dongle found.
     pub fn open() -> Result<Self, OpenError> {
-        let usb_err = |e: nusb::Error| OpenError::Usb(e.to_string());
-        let info = nusb::list_devices()
-            .wait()
-            .map_err(usb_err)?
-            .find(|d| d.vendor_id() == VENDOR_ID && d.product_id() == PRODUCT_ID)
+        Self::open_where(|_| true)
+    }
+
+    /// Opens the dongle at the given bus and address (from [`list`]).
+    pub fn open_at(bus_id: &str, address: u8) -> Result<Self, OpenError> {
+        Self::open_where(|s| s.bus_id == bus_id && s.address == address)
+    }
+
+    fn open_where(select: impl Fn(&DeviceSummary) -> bool) -> Result<Self, OpenError> {
+        let info = supported_devices()?
+            .into_iter()
+            .find(|d| select(&summary(d)))
             .ok_or(OpenError::NotFound)?;
-        let summary = DeviceSummary {
-            bus_id: info.bus_id().to_string(),
-            address: info.device_address(),
-            serial: info.serial_number().map(str::to_string),
-            product: info.product_string().map(str::to_string),
-        };
+        let summary = summary(&info);
         let device = info.open().wait().map_err(usb_err)?;
         let interface = device.detach_and_claim_interface(INTERFACE).wait().map_err(usb_err)?;
 
@@ -121,5 +158,19 @@ impl Transport for UsbTransport {
         let mut bytes = completion.buffer.into_vec();
         bytes.truncate(len);
         Ok(bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supported_ids() {
+        for pid in [0x0132, 0x0195, 0x0184, 0x0134] {
+            assert!(is_supported(0x045C, pid), "{pid:04x}");
+        }
+        assert!(!is_supported(0x045C, 0x02AA));
+        assert!(!is_supported(0x1234, 0x0132));
     }
 }

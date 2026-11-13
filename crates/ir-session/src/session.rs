@@ -81,6 +81,7 @@ pub struct Session<C: Connector> {
     connector: C,
     transport: Option<Recorder<C::Transport>>,
     device: String,
+    protocol: Option<Protocol>,
     state: State,
     learner: Option<(Learner, LearnMode)>,
     /// In `Recovering`: data seen since entering (the dongle answered).
@@ -100,6 +101,7 @@ impl<C: Connector> Session<C> {
             connector,
             transport: None,
             device: String::new(),
+            protocol: None,
             state: State::Disconnected,
             learner: None,
             recovery_saw_data: false,
@@ -137,6 +139,11 @@ impl<C: Connector> Session<C> {
             (Command::StopCapture, State::Capturing) => {
                 self.learner = None;
                 self.enter_recovering();
+            }
+            (Command::Transmit { .. }, State::Ready) if self.protocol == Some(Protocol::Huffman) => {
+                self.events.push(Event::Error(
+                    "transmitting is not supported for this dongle model (Huffman protocol)".into(),
+                ));
             }
             (Command::Transmit { pulses, frequency_hz }, State::Ready) => self.transmit(&pulses, frequency_hz),
             (command, state) => {
@@ -198,6 +205,7 @@ impl<C: Connector> Session<C> {
         self.flush_io();
         match result {
             Ok(protocol) => {
+                self.protocol = Some(protocol);
                 self.events.push(Event::Connected { device: self.device.clone(), protocol });
                 self.set_state(State::Ready);
             }
@@ -295,6 +303,7 @@ impl<C: Connector> Session<C> {
     fn drop_device(&mut self) {
         self.learner = None;
         self.transport = None;
+        self.protocol = None;
     }
 
     fn enter_recovering(&mut self) {
@@ -581,6 +590,18 @@ mod tests {
         let mut s = connected(chunks.into_iter().map(Step::ExpectWrite).collect());
         s.handle(Command::Transmit { pulses, frequency_hz: 38000 });
         assert_eq!(non_io(s.take_events()), vec![Event::Transmitted { pulses: 1 }]);
+        assert_eq!(s.state(), State::Ready);
+    }
+
+    #[test]
+    fn transmit_is_refused_for_huffman_dongles() {
+        let huffman = [0xFC, 0xFC, 0xFC, 0xFC, 0x02, 0xAA];
+        let mut s = session(vec![Ok(vec![Step::Timeout, w(command::IDENTIFY), Step::Reply(huffman.to_vec())])]);
+        s.handle(Command::Connect);
+        s.take_events();
+        s.handle(Command::Transmit { pulses: vec![Pulse { on_us: 560, off_us: 0 }], frequency_hz: 38000 });
+        let events = non_io(s.take_events());
+        assert!(matches!(&events[..], [Event::Error(m)] if m.contains("not supported")), "{events:?}");
         assert_eq!(s.state(), State::Ready);
     }
 

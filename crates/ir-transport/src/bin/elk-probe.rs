@@ -45,7 +45,7 @@ fn main() -> ExitCode {
         format!(
             "# device: {:04x}:{:04x} {} bus {} addr {} serial {}",
             ir_transport::usb::VENDOR_ID,
-            ir_transport::usb::PRODUCT_ID,
+            s.product_id,
             s.product.as_deref().unwrap_or("?"),
             s.bus_id,
             s.address,
