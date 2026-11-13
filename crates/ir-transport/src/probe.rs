@@ -1,22 +1,37 @@
-//! Testable parts of the elk-probe tool: argument parsing and the text that
-//! describes a learn outcome in the fixture log.
+//! Testable parts of the elk-probe tool: argument parsing (including the
+//! transmit payload) and the text that describes a learn outcome in the
+//! fixture log.
 //!
 //! Exists so the binary itself is only wiring, while its user-facing
 //! behaviour is covered by unit tests.
 
-use elk_proto::pulse::{self, DecodeError};
+use elk_proto::nec;
+use elk_proto::pulse::{self, DecodeError, Pulse};
+use ir_codec::Encoding;
 
 use crate::ops::LearnOutcome;
 use crate::recorder::hex;
 
-pub const USAGE: &str = "usage: elk-probe identify\n       elk-probe learn [--wait SECONDS] [--count N] [--name NAME]";
+pub const USAGE: &str = "usage: elk-probe identify\n       elk-probe learn [--wait SECONDS] [--count N] [--name NAME]\n       elk-probe transmit (--nec HEX | --learned HEX) [--freq HZ]";
 
 /// What the probe should do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProbeCmd {
     Identify,
     Learn { wait_s: u32, count: u32, name: Option<String> },
+    Transmit { payload: Payload, freq_hz: u32 },
 }
+
+/// What to transmit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Payload {
+    /// NEC (address, command) byte pairs.
+    Nec(Vec<u8>),
+    /// Learned bytes in the dongle's plain format.
+    Learned(Vec<u8>),
+}
+
+pub const DEFAULT_FREQ_HZ: u32 = 38_000;
 
 pub const DEFAULT_WAIT_S: u32 = 30;
 
@@ -27,6 +42,7 @@ pub fn parse_args(args: &[String]) -> Result<ProbeCmd, String> {
         "identify" if rest.is_empty() => Ok(ProbeCmd::Identify),
         "identify" => Err("identify takes no options".into()),
         "learn" => parse_learn(rest),
+        "transmit" => parse_transmit(rest),
         other => Err(format!("unknown command: {other}")),
     }
 }
@@ -56,6 +72,51 @@ fn parse_learn(mut rest: &[String]) -> Result<ProbeCmd, String> {
         }
     }
     Ok(ProbeCmd::Learn { wait_s, count, name })
+}
+
+fn parse_transmit(mut rest: &[String]) -> Result<ProbeCmd, String> {
+    let (mut payload, mut freq_hz) = (None, DEFAULT_FREQ_HZ);
+    while let [flag, tail @ ..] = rest {
+        let [value, tail @ ..] = tail else {
+            return Err(format!("{flag} needs a value"));
+        };
+        let bytes = || ir_codec::parse(value, Encoding::Hex).map_err(|e| format!("{flag}: {e}"));
+        let new_payload = match flag.as_str() {
+            "--nec" => Some(Payload::Nec(bytes()?)),
+            "--learned" => Some(Payload::Learned(bytes()?)),
+            "--freq" => {
+                freq_hz = value.parse().map_err(|_| format!("--freq: not a number: {value}"))?;
+                None
+            }
+            other => return Err(format!("unknown option: {other}")),
+        };
+        if new_payload.is_some() {
+            if payload.is_some() {
+                return Err("give either --nec or --learned, not both".into());
+            }
+            payload = new_payload;
+        }
+        rest = tail;
+    }
+    if freq_hz == 0 {
+        return Err("--freq must be above 0".into());
+    }
+    let payload = payload.ok_or("transmit needs --nec or --learned")?;
+    payload.pulses()?;
+    Ok(ProbeCmd::Transmit { payload, freq_hz })
+}
+
+impl Payload {
+    /// Converts the payload to pulses, with a readable error.
+    pub fn pulses(&self) -> Result<Vec<Pulse>, String> {
+        match self {
+            Payload::Nec(b) if b.is_empty() => Err("--nec: no bytes".into()),
+            Payload::Nec(b) => nec::encode(b).map_err(|_| "--nec needs address/command pairs".into()),
+            Payload::Learned(b) => {
+                pulse::decode_learned(b).map_err(|_| "--learned: code ends unexpectedly".into())
+            }
+        }
+    }
 }
 
 /// Log lines describing one learn outcome, including a pulse decode.
@@ -125,6 +186,33 @@ mod tests {
         assert!(parse_args(&args(&["learn", "--name", "../x"])).is_err());
         assert!(parse_args(&args(&["learn", "--name", "a b"])).is_err());
         assert!(parse_args(&args(&["learn", "--name", ""])).is_err());
+    }
+
+    #[test]
+    fn transmit_nec_with_default_frequency() {
+        assert_eq!(
+            parse_args(&args(&["transmit", "--nec", "00 59"])),
+            Ok(ProbeCmd::Transmit { payload: Payload::Nec(vec![0x00, 0x59]), freq_hz: DEFAULT_FREQ_HZ })
+        );
+    }
+
+    #[test]
+    fn transmit_learned_with_frequency() {
+        assert_eq!(
+            parse_args(&args(&["transmit", "--learned", "FF2337", "--freq", "36000"])),
+            Ok(ProbeCmd::Transmit { payload: Payload::Learned(vec![0xFF, 0x23, 0x37]), freq_hz: 36000 })
+        );
+    }
+
+    #[test]
+    fn transmit_rejects_bad_input() {
+        assert!(parse_args(&args(&["transmit"])).is_err());
+        assert!(parse_args(&args(&["transmit", "--nec", "00"])).is_err(), "NEC needs pairs");
+        assert!(parse_args(&args(&["transmit", "--nec", "zz"])).is_err());
+        assert!(parse_args(&args(&["transmit", "--nec", ""])).is_err(), "empty");
+        assert!(parse_args(&args(&["transmit", "--nec", "0059", "--learned", "23"])).is_err());
+        assert!(parse_args(&args(&["transmit", "--learned", "23FF"])).is_err(), "must decode");
+        assert!(parse_args(&args(&["transmit", "--nec", "0059", "--freq", "0"])).is_err());
     }
 
     #[test]

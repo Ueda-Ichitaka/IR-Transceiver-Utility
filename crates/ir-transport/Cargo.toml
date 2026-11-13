@@ -12,3 +12,4 @@ license.workspace = true
 [dependencies]
 elk-proto.workspace = true
 nusb.workspace = true
+ir-codec.workspace = true

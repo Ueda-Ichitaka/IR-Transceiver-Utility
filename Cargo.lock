@@ -102,6 +102,7 @@ name = "ir-transport"
 version = "0.1.0"
 dependencies = [
  "elk-proto",
+ "ir-codec",
  "nusb",
 ]
 
