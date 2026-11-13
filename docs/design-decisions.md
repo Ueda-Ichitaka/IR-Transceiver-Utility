@@ -51,3 +51,35 @@ applied. Question 25 is still open.
 
 24. **Navigation** - sidebar drawer.
 25. **Outside the window** (tray icon, global shortcuts, D-Bus, CLI) - deferred; needs more information and brainstorming.
+
+## Open issues
+
+### cxx-kde-frameworks does not build with current KDE Frameworks (blocks the GUI)
+
+The app skeleton is on branch `wip/app-skeleton`. Building it fails inside
+cxx-kde-frameworks (master 5c51af42, the only branch):
+
+```
+error: renaming of the library `Qt6` was specified, however this crate contains no `#[link(...)]` attributes referencing this library
+```
+
+Cause: its build script asks the `cmake-package` crate (0.1.15) for the link
+libraries of `KF6::I18nQml`. These include the CMake target
+`Qt6::QmlIntegration` (header-only), which cmake-package prints unchanged as
+`cargo:rustc-link-lib=dylib=Qt6::QmlIntegration`; rustc reads the colon as
+renaming syntax. cmake-package 0.3.0 has the same code. Seen with Qt 6.12 /
+KF 6.31 (Arch); not verified on Debian (KF 6.13).
+
+Options (a decision is needed):
+
+- **A. Patch cmake-package locally** - a copy under `third_party/` with
+  a `[patch.crates-io]` entry that skips unresolved `Namespace::Target`
+  names; report the bug upstream and drop the patch once it is fixed.
+  Smallest change.
+- **B. Fork cxx-kde-frameworks** - point the git dependency at a fork with the
+  fix in its build script.
+- **C. Go without cxx-kde-frameworks for now** - plain Qt (no KAboutData,
+  KCrash, KI18n) until upstream is fixed. Contradicts decision 2.
+
+Recommendation: A, plus an upstream report to cmake-package and
+cxx-kde-frameworks.
