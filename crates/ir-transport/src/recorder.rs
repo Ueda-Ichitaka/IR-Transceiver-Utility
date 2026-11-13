@@ -46,6 +46,11 @@ impl<T: Transport> Recorder<T> {
         self.read_timeouts
     }
 
+    /// Removes and returns the logged entries (the timeout count is kept).
+    pub fn take_entries(&mut self) -> Vec<Entry> {
+        std::mem::take(&mut self.entries)
+    }
+
     pub fn into_inner(self) -> T {
         self.inner
     }
@@ -124,6 +129,16 @@ mod tests {
         assert_eq!(r.read(T), Err(TransportError::Timeout));
         assert!(r.entries().is_empty());
         assert_eq!(r.read_timeouts(), 2);
+    }
+
+    #[test]
+    fn take_entries_empties_the_log() {
+        let mut r = Recorder::new(MockTransport::new([Step::Reply(vec![1]), Step::Reply(vec![2])]));
+        r.read(T).unwrap();
+        assert_eq!(r.take_entries().len(), 1);
+        assert!(r.entries().is_empty());
+        r.read(T).unwrap();
+        assert_eq!(r.take_entries()[0].event, Event::In(vec![2]));
     }
 
     #[test]

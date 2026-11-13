@@ -1,8 +1,8 @@
 //! Scripted `Transport` for tests.
 //!
 //! Exists so protocol operations can be tested without hardware: a script of
-//! expected writes and canned read results is replayed in order, and any
-//! deviation panics with a description of what was expected.
+//! expected writes, canned read results and failures is replayed in order,
+//! and any deviation panics with a description of what was expected.
 
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -18,6 +18,8 @@ pub enum Step {
     Reply(Vec<u8>),
     /// The next call must be a read; it times out.
     Timeout,
+    /// The next call (read or write) fails with this error.
+    Fail(TransportError),
 }
 
 /// Replays a script. Reads after the script ends time out.
@@ -41,6 +43,7 @@ impl Transport for MockTransport {
     fn write(&mut self, data: &[u8], _timeout: Duration) -> Result<(), TransportError> {
         match self.script.pop_front() {
             Some(Step::ExpectWrite(expected)) if expected == data => Ok(()),
+            Some(Step::Fail(e)) => Err(e),
             other => panic!("unexpected write of {data:02X?}, script expected {other:?}"),
         }
     }
@@ -49,6 +52,7 @@ impl Transport for MockTransport {
         match self.script.pop_front() {
             Some(Step::Reply(bytes)) => Ok(bytes),
             Some(Step::Timeout) | None => Err(TransportError::Timeout),
+            Some(Step::Fail(e)) => Err(e),
             Some(other) => panic!("unexpected read, script expected {other:?}"),
         }
     }
@@ -83,6 +87,16 @@ mod tests {
     fn is_done_false_while_steps_remain() {
         let m = MockTransport::new([Step::Timeout]);
         assert!(!m.is_done());
+    }
+
+    #[test]
+    fn fail_step_errors_reads_and_writes() {
+        let mut m = MockTransport::new([
+            Step::Fail(TransportError::Disconnected),
+            Step::Fail(TransportError::Usb("x".into())),
+        ]);
+        assert_eq!(m.read(T), Err(TransportError::Disconnected));
+        assert_eq!(m.write(&[1], T), Err(TransportError::Usb("x".into())));
     }
 
     #[test]
