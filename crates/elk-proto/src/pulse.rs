@@ -6,7 +6,7 @@
 //! adds 4080 us and continues the same duration, bytes alternate on/off.
 
 /// One IR pulse: carrier on for `on_us`, then off for `off_us` microseconds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pulse {
     pub on_us: u32,
     pub off_us: u32,

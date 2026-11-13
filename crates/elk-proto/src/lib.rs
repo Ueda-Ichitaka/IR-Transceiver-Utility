@@ -9,8 +9,12 @@
 //! - [`identify`]: classifying the identify reply into a protocol variant
 //! - [`learn`]: reassembling a learned IR code from bulk IN transfers
 //! - [`pulse`]: decoding learned bytes into on/off pulse durations
+//! - [`nec`]: encoding NEC address/command pairs into pulses
+//! - [`transmit`]: compressing pulses and building the transmit chunks
 
 pub mod command;
 pub mod identify;
 pub mod learn;
+pub mod nec;
 pub mod pulse;
+pub mod transmit;
