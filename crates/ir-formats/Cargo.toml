@@ -1,0 +1,14 @@
+# ir-formats - import and export of IR codes in other tools' formats.
+#
+# Converters between pulse timings and Pronto hex, LIRC raw configs and
+# Flipper Zero .ir files (design decisions 17 and 18), independent of the GUI
+# and fully unit tested.
+[package]
+name = "ir-formats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+elk-proto.workspace = true

@@ -120,6 +120,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ir-formats"
+version = "0.1.0"
+dependencies = [
+ "elk-proto",
+]
+
+[[package]]
 name = "ir-library"
 version = "0.1.0"
 dependencies = [
