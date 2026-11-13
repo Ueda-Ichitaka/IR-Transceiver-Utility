@@ -7,7 +7,11 @@
 //! - [`budget`]: capture limit and low-memory guard, from /proc/meminfo
 //! - [`capture`]: capture buffer bounded by a byte budget
 //! - [`session`]: the state machine over one dongle connection
+//! - [`worker`]: runs a session on its own thread
+//! - [`usb`]: the connector for real dongles
 
 pub mod budget;
 pub mod capture;
 pub mod session;
+pub mod usb;
+pub mod worker;
