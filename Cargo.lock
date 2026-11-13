@@ -98,6 +98,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ir-session"
+version = "0.1.0"
+dependencies = [
+ "elk-proto",
+ "ir-transport",
+]
+
+[[package]]
 name = "ir-transport"
 version = "0.1.0"
 dependencies = [

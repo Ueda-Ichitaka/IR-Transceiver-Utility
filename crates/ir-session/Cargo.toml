@@ -1,0 +1,14 @@
+# ir-session - the device session of the IR Transceiver Utility.
+#
+# Owns the connection to the dongle on a worker thread, runs learn, capture
+# and transmit as a state machine, and provides the memory-bounded capture
+# buffer. Independent of Qt so it can be tested with the scripted transport.
+[package]
+name = "ir-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+elk-proto.workspace = true
+ir-transport.workspace = true
