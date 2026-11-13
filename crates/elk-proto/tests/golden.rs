@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use elk_proto::nec;
+use elk_proto::nec::{self, BitOrder};
 use elk_proto::pulse::{Pulse, decode_learned};
 use elk_proto::transmit::{checksum, compress_pulses, mangle, transmit_chunks};
 
@@ -89,12 +89,12 @@ fn nec_pulses_match_reference() {
             p(on.parse().unwrap(), off.parse().unwrap())
         })
         .collect();
-    assert_eq!(nec::encode(&[0x00, 0x59]).unwrap(), expected);
+    assert_eq!(nec::encode(&[0x00, 0x59], BitOrder::MsbFirst).unwrap(), expected);
 }
 
 #[test]
 fn nec_message_matches_reference() {
-    check_message("nec_00_59_38000", 38000, &nec::encode(&[0x00, 0x59]).unwrap());
+    check_message("nec_00_59_38000", 38000, &nec::encode(&[0x00, 0x59], BitOrder::MsbFirst).unwrap());
 }
 
 #[test]
@@ -113,4 +113,17 @@ fn learned_fixture_message_matches_reference() {
     let data = LEARN_LOG.lines().find_map(|l| l.strip_prefix("# data:")).expect("data line");
     let pulses = decode_learned(&hex(data)).unwrap();
     check_message("learned_fixture_38000", 38000, &pulses);
+}
+
+#[test]
+fn learned_fixture_splits_into_nec_frame_and_five_repeats() {
+    use elk_proto::frames;
+    use elk_proto::nec::NecFrame;
+    let data = LEARN_LOG.lines().find_map(|l| l.strip_prefix("# data:")).expect("data line");
+    let pulses = decode_learned(&hex(data)).unwrap();
+    let decoded: Vec<Option<NecFrame>> =
+        frames::split(&pulses, frames::DEFAULT_GAP_US).into_iter().map(nec::decode).collect();
+    let mut expected = vec![Some(NecFrame::Command { address: 0x00, command: 0x59, extended: false })];
+    expected.extend([Some(NecFrame::Repeat); 5]);
+    assert_eq!(decoded, expected);
 }

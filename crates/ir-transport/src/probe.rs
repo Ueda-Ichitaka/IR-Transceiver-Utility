@@ -111,7 +111,7 @@ impl Payload {
     pub fn pulses(&self) -> Result<Vec<Pulse>, String> {
         match self {
             Payload::Nec(b) if b.is_empty() => Err("--nec: no bytes".into()),
-            Payload::Nec(b) => nec::encode(b).map_err(|_| "--nec needs address/command pairs".into()),
+            Payload::Nec(b) => nec::encode(b, nec::BitOrder::LsbFirst).map_err(|_| "--nec needs address/command pairs".into()),
             Payload::Learned(b) => {
                 pulse::decode_learned(b).map_err(|_| "--learned: code ends unexpectedly".into())
             }

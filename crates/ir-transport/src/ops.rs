@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn transmit_writes_all_chunks_with_pauses() {
-        let pulses: Vec<Pulse> = elk_proto::nec::encode(&[0x00, 0x59, 0x00, 0x59]).unwrap();
+        let pulses: Vec<Pulse> = elk_proto::nec::encode(&[0x00, 0x59, 0x00, 0x59], elk_proto::nec::BitOrder::LsbFirst).unwrap();
         let chunks = transmit::transmit_chunks(38000, &pulses).unwrap();
         assert!(chunks.len() > 1);
         let mut m = MockTransport::new(chunks.iter().cloned().map(Step::ExpectWrite));

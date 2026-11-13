@@ -22,6 +22,7 @@ Recommendations are marked where one exists; none of them is applied yet.
 ## Sending
 
 10. **Send payload types** - learned code, pulse timings, NEC address/command, raw USB bytes: all four or a subset?
+    - Finding: elksmart-comm's `-n` option sends NEC bits MSB first, but standard NEC (remotes, Linux, IRremote) is LSB first. `elk-proto` supports both; `elk-probe transmit --nec` and the decoder use the standard order, so `--nec 0059` replays the button learned in the fixture.
 11. **Raw USB bytes** - only behind an "advanced" switch, or always visible?
 12. **Repeat signals in learned codes** - by default cut a learned code down to its first signal and send repeats with a count, or send exactly what was learned?
 13. **Carrier frequency** - editable per code (default 38 kHz), or one global setting?
