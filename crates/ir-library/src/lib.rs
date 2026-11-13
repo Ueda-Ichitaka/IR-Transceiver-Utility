@@ -6,6 +6,8 @@
 //! Modules:
 //! - [`model`]: codes, payload kinds and the TOML file format
 //! - [`store`]: file location, atomic saving and recovery from damaged files
+//! - [`send`]: turning a saved code and the global defaults into what is sent
 
 pub mod model;
+pub mod send;
 pub mod store;

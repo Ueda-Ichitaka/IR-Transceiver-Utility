@@ -11,6 +11,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+elk-proto.workspace = true
 ir-codec.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.2.1"
