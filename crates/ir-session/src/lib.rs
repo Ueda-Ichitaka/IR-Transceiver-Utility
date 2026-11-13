@@ -4,7 +4,7 @@
 //! without Qt or hardware.
 //!
 //! Modules:
-//! - [`budget`]: memory budget for captured data, from /proc/meminfo
+//! - [`budget`]: capture limit and low-memory guard, from /proc/meminfo
 //! - [`capture`]: capture buffer bounded by a byte budget
 //! - [`session`]: the state machine over one dongle connection
 

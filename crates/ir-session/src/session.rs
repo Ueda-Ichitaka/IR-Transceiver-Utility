@@ -5,11 +5,14 @@
 //! unanswered learn) and continuous capture live in one tested place. The
 //! session is driven by `handle` (commands) and `tick` (one blocking read of
 //! at most 100 ms while learning, capturing or recovering); `worker` runs it
-//! on a thread. Every USB transfer is reported as an event.
+//! on a thread. Every USB transfer is reported as an event. During capture,
+//! memory is checked once per second and capture stops when it runs low.
 
 use std::time::Duration;
 
 use elk_proto::identify::Protocol;
+
+use crate::budget::{self, MemInfo};
 use elk_proto::pulse::Pulse;
 use ir_transport::ops::{self, LearnConfig, LearnOutcome, Learner, OpError};
 use ir_transport::recorder::{Entry, Recorder};
@@ -83,6 +86,9 @@ pub struct Session<C: Connector> {
     /// In `Recovering`: data seen since entering (the dongle answered).
     recovery_saw_data: bool,
     pause: Box<dyn FnMut(Duration) + Send>,
+    memory_probe: Box<dyn FnMut() -> Option<MemInfo> + Send>,
+    /// Capture ticks since the last memory check.
+    ticks_since_memory_check: u32,
     events: Vec<Event>,
 }
 
@@ -98,6 +104,8 @@ impl<C: Connector> Session<C> {
             learner: None,
             recovery_saw_data: false,
             pause,
+            memory_probe: Box::new(budget::read_meminfo),
+            ticks_since_memory_check: 0,
             events: Vec::new(),
         }
     }
@@ -139,6 +147,12 @@ impl<C: Connector> Session<C> {
 
     /// Advances learning, capture or recovery by one read.
     pub fn tick(&mut self) {
+        if self.state == State::Capturing && self.memory_low() {
+            self.learner = None;
+            self.events.push(Event::Error("capture stopped: the system is running low on memory".into()));
+            self.enter_recovering();
+            return;
+        }
         match self.state {
             State::Learning | State::Capturing => self.step_learner(),
             State::Recovering => self.step_recovery(),
@@ -146,9 +160,25 @@ impl<C: Connector> Session<C> {
         }
     }
 
+    /// Replaces the memory probe used by the low-memory guard during capture
+    /// (default: /proc/meminfo).
+    pub fn set_memory_probe(&mut self, probe: Box<dyn FnMut() -> Option<MemInfo> + Send>) {
+        self.memory_probe = probe;
+    }
+
     /// Events produced since the last call.
     pub fn take_events(&mut self) -> Vec<Event> {
         std::mem::take(&mut self.events)
+    }
+
+    /// Checks memory once per second of capture.
+    fn memory_low(&mut self) -> bool {
+        self.ticks_since_memory_check += 1;
+        if self.ticks_since_memory_check < READS_PER_SECOND {
+            return false;
+        }
+        self.ticks_since_memory_check = 0;
+        (self.memory_probe)().is_some_and(|info| !budget::memory_ok(info))
     }
 
     fn connect(&mut self) {
@@ -478,6 +508,38 @@ mod tests {
         s.tick();
         let io = s.take_events().into_iter().filter(|e| matches!(e, Event::Transfer(_))).count();
         assert_eq!(io, 4, "LEARN out, code in, STOP out, LEARN out");
+    }
+
+    #[test]
+    fn capture_stops_when_memory_runs_low() {
+        use crate::budget::MemInfo;
+        let mut steps = vec![w(command::LEARN)];
+        steps.extend((0..READS_PER_SECOND).map(|_| Step::Timeout));
+        let mut s = connected(steps);
+        let low = MemInfo { total: 1 << 34, available: 1 << 20 };
+        s.set_memory_probe(Box::new(move || Some(low)));
+        s.handle(Command::StartCapture);
+        for _ in 0..READS_PER_SECOND {
+            s.tick();
+        }
+        let events = non_io(s.take_events());
+        assert!(events.iter().any(|e| matches!(e, Event::Error(m) if m.contains("memory"))), "{events:?}");
+        assert_eq!(s.state(), State::Recovering);
+    }
+
+    #[test]
+    fn capture_continues_with_enough_memory() {
+        use crate::budget::MemInfo;
+        let mut steps = vec![w(command::LEARN)];
+        steps.extend((0..READS_PER_SECOND).map(|_| Step::Timeout));
+        let mut s = connected(steps);
+        let plenty = MemInfo { total: 1 << 34, available: 1 << 33 };
+        s.set_memory_probe(Box::new(move || Some(plenty)));
+        s.handle(Command::StartCapture);
+        for _ in 0..READS_PER_SECOND {
+            s.tick();
+        }
+        assert_eq!(s.state(), State::Capturing);
     }
 
     #[test]
