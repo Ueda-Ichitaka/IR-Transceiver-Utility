@@ -1,0 +1,16 @@
+# ir-library - the saved IR codes of the IR Transceiver Utility.
+#
+# A list of named, tagged codes stored as TOML in the user's data directory,
+# with atomic saves and recovery from a damaged file. Independent of Qt and
+# USB so it is fully unit tested.
+[package]
+name = "ir-library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ir-codec.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.2.1"

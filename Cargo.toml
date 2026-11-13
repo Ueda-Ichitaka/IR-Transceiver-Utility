@@ -1,12 +1,13 @@
 # Cargo workspace for the IR Transceiver Utility.
 #
 # Groups the crates that make up the app: the pure protocol crate (elk-proto),
-# the byte encodings (ir-codec), the USB transport crate (ir-transport, which
-# also builds the elk-probe tool) and the device session (ir-session).
-# Shared package metadata and dependency versions live here.
+# the byte encodings (ir-codec), the code library (ir-library), the USB
+# transport crate (ir-transport, which also builds the elk-probe tool) and the
+# device session (ir-session). Shared package metadata and dependency versions
+# live here.
 [workspace]
 resolver = "3"
-members = ["crates/elk-proto", "crates/ir-codec", "crates/ir-session", "crates/ir-transport"]
+members = ["crates/elk-proto", "crates/ir-codec", "crates/ir-library", "crates/ir-session", "crates/ir-transport"]
 
 [workspace.package]
 version = "0.1.0"
