@@ -36,6 +36,8 @@ pub enum Command {
     StartCapture,
     StopCapture,
     Transmit { pulses: Vec<Pulse>, frequency_hz: u32 },
+    /// Write bytes to the USB OUT endpoint unchanged.
+    TransmitRaw { bytes: Vec<u8> },
 }
 
 /// Session states.
@@ -61,6 +63,7 @@ pub enum Event {
     /// A learn finished (also every code during capture).
     Learned(LearnOutcome),
     Transmitted { pulses: usize },
+    RawSent { bytes: usize },
     Error(String),
 }
 
@@ -146,6 +149,7 @@ impl<C: Connector> Session<C> {
                 ));
             }
             (Command::Transmit { pulses, frequency_hz }, State::Ready) => self.transmit(&pulses, frequency_hz),
+            (Command::TransmitRaw { bytes }, State::Ready) => self.transmit_raw(&bytes),
             (command, state) => {
                 self.events.push(Event::Error(format!("{} is not possible while {state:?}", name(&command))));
             }
@@ -283,6 +287,17 @@ impl<C: Connector> Session<C> {
         }
     }
 
+    fn transmit_raw(&mut self, bytes: &[u8]) {
+        let Some(t) = self.transport.as_mut() else { return };
+        let result = t.write(bytes, ops::WRITE_TIMEOUT);
+        self.flush_io();
+        match result {
+            Ok(()) => self.events.push(Event::RawSent { bytes: bytes.len() }),
+            Err(TransportError::Disconnected) => self.lost(OpError::Transport(TransportError::Disconnected)),
+            Err(e) => self.events.push(Event::Error(format!("sending raw bytes failed: {e}"))),
+        }
+    }
+
     /// A learn-related failure: the dongle's state is unknown afterwards.
     fn learn_failed(&mut self, e: OpError) {
         self.learner = None;
@@ -335,6 +350,7 @@ fn name(command: &Command) -> &'static str {
         Command::StartCapture => "Start capture",
         Command::StopCapture => "Stop capture",
         Command::Transmit { .. } => "Transmit",
+        Command::TransmitRaw { .. } => "Send raw bytes",
     }
 }
 
@@ -603,6 +619,20 @@ mod tests {
         let events = non_io(s.take_events());
         assert!(matches!(&events[..], [Event::Error(m)] if m.contains("not supported")), "{events:?}");
         assert_eq!(s.state(), State::Ready);
+    }
+
+    #[test]
+    fn raw_bytes_are_written_unchanged() {
+        let mut s = connected(vec![Step::ExpectWrite(vec![0xFC, 0xFC, 0xFC, 0xFC])]);
+        s.handle(Command::TransmitRaw { bytes: vec![0xFC; 4] });
+        assert_eq!(non_io(s.take_events()), vec![Event::RawSent { bytes: 4 }]);
+    }
+
+    #[test]
+    fn raw_bytes_need_a_ready_dongle() {
+        let mut s = session(vec![]);
+        s.handle(Command::TransmitRaw { bytes: vec![1] });
+        assert!(matches!(&s.take_events()[..], [Event::Error(_)]));
     }
 
     #[test]
