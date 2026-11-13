@@ -1,0 +1,13 @@
+# ir-codec - byte encodings shown and accepted by the app: hex, binary,
+# decimal and Base64.
+#
+# Separate crate so the parsing and formatting rules are unit tested in
+# isolation and shared by the GUI and the command-line tools.
+[package]
+name = "ir-codec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
