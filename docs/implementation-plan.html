@@ -189,7 +189,11 @@ svg.wave{width:100%;height:70px;background:var(--bz-view);border:1px solid var(-
     <div class="card">
       <h3>Known quirks of the 0132</h3>
       <ul>
-        <li>The dongle answers learn with an extra <code>FF FF FF FF</code> before the IR data. The stock tool aborts here, so the parser has to skip it.</li>
+        <li>Other reports say the 0132 sends an extra <code>FF FF FF FF</code> before the learn reply. <strong>Your unit does not</strong> (fixture 1794596116): the reply starts directly with <code>FE FE FE FE</code>. The parser accepts both. Continuation chunks can also start with <code>FF</code> bytes, which are long gaps in the data, so an acknowledgement can only be recognised before the header.</li>
+        <li>Measured on your unit: IN data arrives as 63-byte transfers about 100 ms apart, so a 216-byte code takes about 0.3 s. The announced length matched the received bytes in all 3 captures.</li>
+        <li>A learn captures the whole button hold, NEC repeat frames included. One press gave 5 repeats (216 B) and a shorter press gave 3 (158 B). Send should offer to cut a code down to its first frame.</li>
+        <li>Sending <code>FD FD FD FD</code> and then <code>FE FE FE FE</code> straight away re-arms learn reliably, so the capture loop works.</li>
+        <li>Marks are measured about 50 us long and spaces about 50 us short (608/512 instead of 560/560 for NEC). Protocol guessing needs tolerances.</li>
         <li>After a cancelled learn, the dongle ignores all commands until it receives an IR signal. According to elksmart-comm, <code>libusb_reset_device()</code> does not clear this. The ways known to work are pressing any remote button or unplugging the dongle. A power-cycle of the port from software has not been tested yet and needs a spike in P4.</li>
         <li>The announced length doesn't always match the bytes actually received. Reads need a timeout rather than an exact byte count.</li>
       </ul>
@@ -416,7 +420,7 @@ stateDiagram-v2
   <h2>6. Build order (test first)</h2>
   <p class="prose">Every step follows red, green, refactor. The test names listed under each phase are written before the code. Hardware is only needed in phase 0 and in the opt-in <code>#[ignore]</code> tests marked <code>hw_</code>.</p>
 
-  <details class="phase" open><summary><span class="pnum">P0</span>Verify hardware and environment</summary><div class="pbody">
+  <details class="phase" open><summary><span class="pnum">P0</span>Verify hardware and environment &#x2705; done</summary><div class="pbody">
     <div><h4>Do</h4><ul><li>Run <code>lsusb -v -d 045c:0132</code>: check the endpoint addresses and interface class.</li><li>Read the existing udev rule and check the permissions on the USB node.</li><li>Check whether LIRC or a kernel module claims the device.</li><li>Record reference dumps with <code>elksmart-comm -d</code>: identify, learn (one real button press), transmit.</li></ul></div>
     <div><h4>Output</h4><ul><li><code>fixtures/*.bin</code> with real IN/OUT byte sequences</li><li>Corrections to this plan if the descriptors differ</li></ul></div>
   </div></details>
@@ -475,7 +479,7 @@ stateDiagram-v2
   <h2>8. Decisions needed from you</h2>
   <div class="tablewrap"><table>
     <tr><th>Topic</th><th>Options</th><th>Notes</th></tr>
-    <tr><td>USB library</td><td><strong>nusb</strong> (pure Rust, async, built-in hotplug)<br><strong>rusb</strong> (libusb bindings, closest to elksmart-comm)</td><td>nusb has no C dependency. rusb mirrors the reference code one to one.</td></tr>
+    <tr><td>USB library</td><td>&#x2705; <strong>nusb 0.2.9</strong> (decided)</td><td>Working on hardware: <code>elk-probe</code> identify and learn.</td></tr>
     <tr><td>Build system</td><td><strong>CMake + ECM wrapping Cargo</strong> (KDE tutorial)<br><strong>Cargo only</strong></td><td>CMake handles install and the desktop file. Cargo-only is simpler during development.</td></tr>
     <tr><td>Huffman protocol</td><td>Implement now / leave out for v1</td><td>Your 0132 uses the plain protocol (to be confirmed in P0). The Huffman encoder upstream is untested.</td></tr>
     <tr><td>Send payload types</td><td>Learned frame, pulse timings, NEC, raw USB bytes: all four, or a subset</td><td>Sending raw USB bytes can put the dongle into a bad state. It could sit behind an "advanced" switch.</td></tr>
