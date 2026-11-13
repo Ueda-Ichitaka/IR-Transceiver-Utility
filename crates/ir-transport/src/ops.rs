@@ -109,36 +109,67 @@ pub fn identify(t: &mut impl Transport) -> Result<Protocol, OpError> {
     identify::classify(&reply).ok_or(OpError::UnknownIdentify(reply))
 }
 
-/// Arms learn mode and collects one code.
-pub fn learn(t: &mut impl Transport, cfg: LearnConfig) -> Result<LearnOutcome, OpError> {
-    t.write(&command::LEARN, WRITE_TIMEOUT)?;
-    let mut assembler = LearnAssembler::new();
-    let mut receiving = false;
-    let mut idle = 0;
-    loop {
+/// Learn in progress, advanced one read at a time so a caller can check for
+/// other work (such as a stop request) between reads.
+#[derive(Debug)]
+pub struct Learner {
+    cfg: LearnConfig,
+    assembler: LearnAssembler,
+    receiving: bool,
+    idle: u32,
+}
+
+impl Learner {
+    /// Arms learn mode.
+    pub fn start(t: &mut impl Transport, cfg: LearnConfig) -> Result<Self, OpError> {
+        t.write(&command::LEARN, WRITE_TIMEOUT)?;
+        Ok(Self { cfg, assembler: LearnAssembler::new(), receiving: false, idle: 0 })
+    }
+
+    /// Does one read. `Ok(None)` while the code is not finished.
+    pub fn step(&mut self, t: &mut impl Transport) -> Result<Option<LearnOutcome>, OpError> {
         match t.read(LEARN_READ_TIMEOUT) {
             Ok(chunk) => {
-                idle = 0;
-                match assembler.push(&chunk).map_err(OpError::Learn)? {
-                    Progress::Acknowledged => {}
-                    Progress::Receiving { .. } => receiving = true,
+                self.idle = 0;
+                match self.assembler.push(&chunk).map_err(OpError::Learn)? {
+                    Progress::Acknowledged => Ok(None),
+                    Progress::Receiving { .. } => {
+                        self.receiving = true;
+                        Ok(None)
+                    }
                     Progress::Complete(code) => {
                         t.write(&command::STOP, WRITE_TIMEOUT)?;
-                        return Ok(LearnOutcome::Complete(code));
+                        Ok(Some(LearnOutcome::Complete(code)))
                     }
                 }
             }
             Err(TransportError::Timeout) => {
-                idle += 1;
-                let limit = if receiving { cfg.gap_reads } else { cfg.wait_reads };
-                if idle >= limit {
-                    return Ok(match assembler.take_partial() {
-                        Some(code) => LearnOutcome::Short(code),
-                        None => LearnOutcome::NothingReceived,
-                    });
+                self.idle += 1;
+                let limit = if self.receiving { self.cfg.gap_reads } else { self.cfg.wait_reads };
+                if self.idle < limit {
+                    return Ok(None);
                 }
+                Ok(Some(match self.assembler.take_partial() {
+                    Some(code) => LearnOutcome::Short(code),
+                    None => LearnOutcome::NothingReceived,
+                }))
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// True once a reply header has arrived.
+    pub fn is_receiving(&self) -> bool {
+        self.receiving
+    }
+}
+
+/// Arms learn mode and collects one code.
+pub fn learn(t: &mut impl Transport, cfg: LearnConfig) -> Result<LearnOutcome, OpError> {
+    let mut learner = Learner::start(t, cfg)?;
+    loop {
+        if let Some(outcome) = learner.step(t)? {
+            return Ok(outcome);
         }
     }
 }
@@ -316,6 +347,36 @@ mod tests {
             transmit(&mut m, 38000, &[], &mut |_| {}),
             Err(OpError::Transmit(TransmitError::Empty))
         );
+    }
+
+    #[test]
+    fn learner_does_one_read_per_step() {
+        let mut m = MockTransport::new([
+            w(command::LEARN),
+            Step::Timeout,
+            Step::Reply(header(2, &[1])),
+            Step::Reply(vec![2]),
+            w(command::STOP),
+        ]);
+        let cfg = LearnConfig { wait_reads: 5, gap_reads: 5 };
+        let mut learner = Learner::start(&mut m, cfg).unwrap();
+        assert_eq!(learner.step(&mut m), Ok(None));
+        assert_eq!(learner.step(&mut m), Ok(None));
+        assert!(learner.is_receiving());
+        assert_eq!(
+            learner.step(&mut m),
+            Ok(Some(LearnOutcome::Complete(LearnedCode { announced_len: 2, data: vec![1, 2] })))
+        );
+        assert!(m.is_done());
+    }
+
+    #[test]
+    fn learner_reports_waiting_before_header() {
+        let mut m = MockTransport::new([w(command::LEARN), Step::Reply(vec![0xFF; 4])]);
+        let cfg = LearnConfig { wait_reads: 5, gap_reads: 5 };
+        let mut learner = Learner::start(&mut m, cfg).unwrap();
+        assert_eq!(learner.step(&mut m), Ok(None));
+        assert!(!learner.is_receiving());
     }
 
     #[test]
