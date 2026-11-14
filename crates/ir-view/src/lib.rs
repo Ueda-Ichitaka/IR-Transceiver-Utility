@@ -5,9 +5,11 @@
 //! `device` turns session events into the connection status and the actions
 //! that are enabled, `capture` keeps the received signals and USB transfers
 //! for the two capture tabs within the configured memory limit, `display`
-//! maps a view's settings to its encoding switch.
+//! maps a view's settings to its encoding switch, `send` turns the Send form
+//! into a session command.
 
 pub mod app;
 pub mod capture;
 pub mod device;
 pub mod display;
+pub mod send;

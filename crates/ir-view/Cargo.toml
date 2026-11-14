@@ -17,3 +17,4 @@ ir-codec.workspace = true
 ir-session.workspace = true
 ir-transport.workspace = true
 ir-settings.workspace = true
+ir-library.workspace = true
