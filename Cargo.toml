@@ -2,9 +2,10 @@
 #
 # Groups the crates that make up the app: the pure protocol crate (elk-proto),
 # the byte encodings (ir-codec), other tools' file formats (ir-formats), the
-# code library (ir-library), the USB transport crate (ir-transport, which also
-# builds the elk-probe tool), the device session (ir-session) and the Kirigami
-# GUI (ir-app). Shared package metadata and dependency versions live here.
+# code library (ir-library), the user settings (ir-settings), the USB
+# transport crate (ir-transport, which also builds the elk-probe tool), the
+# device session (ir-session) and the Kirigami GUI (ir-app). Shared package
+# metadata and dependency versions live here.
 [workspace]
 resolver = "3"
 exclude = ["third_party"]
@@ -15,6 +16,7 @@ members = [
     "crates/ir-formats",
     "crates/ir-library",
     "crates/ir-session",
+    "crates/ir-settings",
     "crates/ir-transport",
 ]
 
@@ -31,7 +33,7 @@ nusb = "0.2.9"
 base64 = "0.23.1"
 ir-codec = { path = "crates/ir-codec" }
 ir-transport = { path = "crates/ir-transport" }
-ir-session = { path = "crates/ir-session" }
+ir-library = { path = "crates/ir-library" }
 
 # cmake-package passes header-only CMake targets such as Qt6::QmlIntegration
 # to rustc as link libraries, which breaks cxx-kde-frameworks. The patched

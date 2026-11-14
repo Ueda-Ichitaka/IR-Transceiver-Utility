@@ -3,7 +3,8 @@
 //! Exists so saving can never leave a half-written library behind (write to a
 //! temporary file, flush, then rename) and a damaged file never blocks the
 //! app or gets overwritten: it is moved aside to a timestamped backup and the
-//! app starts with an empty library plus a message saying why.
+//! app starts with an empty library plus a message saying why. The file
+//! helpers are public so the settings file is handled the same way.
 
 use std::fs;
 use std::io::{self, Write};
@@ -36,6 +37,12 @@ pub fn default_path(env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
 
 /// Writes the library atomically, creating the directory if needed.
 pub fn save(path: &Path, library: &Library) -> io::Result<()> {
+    write_atomic(path, &library.to_toml())
+}
+
+/// Writes `text` to `<path>.tmp`, syncs it and renames it over `path`, so a
+/// crash never leaves a half-written file. Creates the directory if needed.
+pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
@@ -43,29 +50,40 @@ pub fn save(path: &Path, library: &Library) -> io::Result<()> {
     tmp_name.push(".tmp");
     let tmp = PathBuf::from(tmp_name);
     let mut file = fs::File::create(&tmp)?;
-    file.write_all(library.to_toml().as_bytes())?;
+    file.write_all(text.as_bytes())?;
     file.sync_all()?;
     drop(file);
     fs::rename(&tmp, path)
 }
 
+/// Reads a text file; `None` when it does not exist.
+pub fn read_optional(path: &Path) -> io::Result<Option<String>> {
+    match fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Renames a damaged file to `<file>.damaged-<now_secs>` and returns the new path.
+pub fn move_aside(path: &Path, now_secs: u64) -> io::Result<PathBuf> {
+    let mut backup = path.as_os_str().to_owned();
+    backup.push(format!(".damaged-{now_secs}"));
+    let backup = PathBuf::from(backup);
+    fs::rename(path, &backup)?;
+    Ok(backup)
+}
+
 /// Loads the library. A missing file gives an empty library; a damaged or
 /// unsupported file is renamed to `<file>.damaged-<now_secs>`.
 pub fn load(path: &Path, now_secs: u64) -> io::Result<Loaded> {
-    let text = match fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Ok(Loaded { library: Library::default(), recovered: None });
-        }
-        Err(e) => return Err(e),
+    let Some(text) = read_optional(path)? else {
+        return Ok(Loaded { library: Library::default(), recovered: None });
     };
     match Library::from_toml(&text) {
         Ok(library) => Ok(Loaded { library, recovered: None }),
         Err(reason) => {
-            let mut backup = path.as_os_str().to_owned();
-            backup.push(format!(".damaged-{now_secs}"));
-            let backup = PathBuf::from(backup);
-            fs::rename(path, &backup)?;
+            let backup = move_aside(path, now_secs)?;
             Ok(Loaded { library: Library::default(), recovered: Some((backup, reason)) })
         }
     }

@@ -447,9 +447,6 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "cxx-qt-lib-extras",
- "elk-proto",
- "ir-codec",
- "ir-session",
 ]
 
 [[package]]
@@ -482,6 +479,16 @@ version = "0.1.0"
 dependencies = [
  "elk-proto",
  "ir-transport",
+]
+
+[[package]]
+name = "ir-settings"
+version = "0.1.0"
+dependencies = [
+ "ir-codec",
+ "ir-library",
+ "serde",
+ "toml",
 ]
 
 [[package]]

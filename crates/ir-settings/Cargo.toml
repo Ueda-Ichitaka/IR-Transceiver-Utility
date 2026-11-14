@@ -1,0 +1,17 @@
+# ir-settings - the user settings of the IR Transceiver Utility.
+#
+# Global defaults (carrier, repeat mode), per-view display options, the
+# capture limit and the preferred dongle, stored as TOML in the user's config
+# directory. Independent of Qt so it is fully unit tested.
+[package]
+name = "ir-settings"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ir-codec.workspace = true
+ir-library.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.2.1"
