@@ -18,6 +18,7 @@ use ir_session::session::Event;
 use ir_session::worker::SessionHandle;
 use ir_settings::Settings;
 use ir_view::app::AppCore;
+use ir_view::text::capitalise;
 
 /// State of the running app.
 pub struct AppState {
@@ -53,7 +54,7 @@ impl AppState {
         let (settings, message) = match settings_path.as_deref().map(|p| ir_settings::load(p, now)) {
             Some(Ok(loaded)) => {
                 let message = loaded.recovered.map(|(backup, reason)| {
-                    format!("The settings file could not be read ({reason:?}); it was moved to {}.", backup.display())
+                    capitalise(&format!("{reason}; the file was moved to {} and the default settings are used.", backup.display()))
                 });
                 (loaded.settings, message)
             }
@@ -64,7 +65,7 @@ impl AppState {
         let (library, library_message) = match library_path.as_deref().map(|p| store::load(p, now)) {
             Some(Ok(loaded)) => {
                 let message = loaded.recovered.map(|(backup, reason)| {
-                    format!("{reason}; the file was moved to {} and the library starts empty.", backup.display())
+                    capitalise(&format!("{reason}; the file was moved to {} and the library starts empty.", backup.display()))
                 });
                 (loaded.library, message)
             }

@@ -89,6 +89,19 @@ pub enum SettingsError {
     UnsupportedVersion(u32),
 }
 
+impl std::fmt::Display for SettingsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SettingsError::Parse(msg) => write!(f, "the settings file is damaged: {msg}"),
+            SettingsError::UnsupportedVersion(v) => {
+                write!(f, "the settings file has format version {v}, this app reads up to {FORMAT_VERSION}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for SettingsError {}
+
 /// Result of loading the settings file.
 #[derive(Debug)]
 pub struct Loaded {
@@ -328,6 +341,15 @@ preferred_serial = "030820250001"
         assert!(matches!(Settings::from_toml("[views.send]\nencoding = \"octal\"\n"), Err(SettingsError::Parse(_))));
         assert!(matches!(Settings::from_toml("[send]\ncarrier_hz = \"fast\"\n"), Err(SettingsError::Parse(_))));
         assert!(matches!(Settings::from_toml("not toml ["), Err(SettingsError::Parse(_))));
+    }
+
+    #[test]
+    fn errors_read_as_sentences() {
+        assert_eq!(
+            SettingsError::UnsupportedVersion(3).to_string(),
+            "the settings file has format version 3, this app reads up to 1"
+        );
+        assert_eq!(SettingsError::Parse("bad".into()).to_string(), "the settings file is damaged: bad");
     }
 
     #[test]
