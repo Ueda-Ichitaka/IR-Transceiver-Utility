@@ -127,3 +127,13 @@ fn learned_fixture_splits_into_nec_frame_and_five_repeats() {
     expected.extend([Some(NecFrame::Repeat); 5]);
     assert_eq!(decoded, expected);
 }
+
+#[test]
+fn learned_fixture_is_described_in_one_line() {
+    let data = LEARN_LOG.lines().find_map(|l| l.strip_prefix("# data:")).expect("data line");
+    let pulses = decode_learned(&hex(data)).unwrap();
+    assert_eq!(
+        elk_proto::protocols::describe::describe_pulses(&pulses),
+        "NEC addr 0x00 cmd 0x59, NEC repeat x5"
+    );
+}

@@ -8,6 +8,7 @@
 //! [`crate::nec`]. Every decoder takes one frame as split by
 //! [`crate::frames::split`]; [`encode`] builds frames from decoded values.
 
+pub mod describe;
 pub mod encode;
 pub mod kaseikyo;
 pub mod manchester;
