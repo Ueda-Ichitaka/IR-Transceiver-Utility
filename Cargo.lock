@@ -507,6 +507,7 @@ dependencies = [
  "elk-proto",
  "ir-codec",
  "ir-session",
+ "ir-settings",
  "ir-transport",
 ]
 

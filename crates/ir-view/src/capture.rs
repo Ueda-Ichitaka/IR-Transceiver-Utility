@@ -208,6 +208,18 @@ pub fn format_time(at: Duration) -> String {
     format!("{}.{:03}", millis / 1000, millis % 1000)
 }
 
+/// Memory used by the capture against its limit, e.g. `1.5 KiB of 4096 MiB`.
+pub fn usage_text(used_bytes: u64, limit_mib: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * 1024;
+    let used = match used_bytes {
+        n if n < KIB => format!("{n} B"),
+        n if n < MIB => format!("{:.1} KiB", n as f64 / KIB as f64),
+        n => format!("{:.1} MiB", n as f64 / MIB as f64),
+    };
+    format!("{used} of {limit_mib} MiB")
+}
+
 /// Pulse timings as `on/off` pairs in microseconds, separated by spaces.
 pub fn pulses_text(pulses: &[Pulse]) -> String {
     let pairs: Vec<String> = pulses.iter().map(|p| format!("{}/{}", p.on_us, p.off_us)).collect();
@@ -348,6 +360,14 @@ mod tests {
     fn time_format() {
         assert_eq!(format_time(Duration::from_millis(0)), "0.000");
         assert_eq!(format_time(Duration::from_millis(12_034)), "12.034");
+    }
+
+    #[test]
+    fn usage() {
+        assert_eq!(usage_text(0, 4096), "0 B of 4096 MiB");
+        assert_eq!(usage_text(1023, 4096), "1023 B of 4096 MiB");
+        assert_eq!(usage_text(1536, 4096), "1.5 KiB of 4096 MiB");
+        assert_eq!(usage_text(3 * 1024 * 1024 + 104_858, 10), "3.1 MiB of 10 MiB");
     }
 
     #[test]

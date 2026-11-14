@@ -46,11 +46,13 @@ pub struct CaptureSettings {
     pub limit_mib: u64,
 }
 
-/// The encoding switch options of each view.
+/// The encoding switch options of each view (the capture page has one per
+/// tab: received signals and USB transfers).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Views {
     pub capture: ViewSettings,
+    pub transfers: ViewSettings,
     pub send: ViewSettings,
     pub library: ViewSettings,
 }
@@ -66,6 +68,9 @@ pub struct ViewSettings {
     pub bytes_per_line: usize,
     /// Whether the switch also offers decoded pulse timings.
     pub offer_pulses: bool,
+    /// Pulse timings are selected instead of `encoding` (only while
+    /// `offer_pulses` is set).
+    pub show_pulses: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -120,13 +125,13 @@ impl Default for CaptureSettings {
 impl Default for Views {
     fn default() -> Self {
         let view = ViewSettings::default();
-        Self { capture: view, send: view, library: view }
+        Self { capture: view, transfers: view, send: view, library: view }
     }
 }
 
 impl Default for ViewSettings {
     fn default() -> Self {
-        Self { encoding: Encoding::Hex, uppercase: true, bytes_per_line: 16, offer_pulses: true }
+        Self { encoding: Encoding::Hex, uppercase: true, bytes_per_line: 16, offer_pulses: true, show_pulses: false }
     }
 }
 
@@ -240,11 +245,12 @@ mod tests {
         assert_eq!(s.send.repeat, RepeatMode::AsLearned);
         assert_eq!(s.capture.limit_mib, 4096);
         assert_eq!(s.capture_limit_bytes(), 4096 * 1024 * 1024);
-        for view in [s.views.capture, s.views.send, s.views.library] {
+        for view in [s.views.capture, s.views.transfers, s.views.send, s.views.library] {
             assert_eq!(view.encoding, Encoding::Hex);
             assert!(view.uppercase);
             assert_eq!(view.bytes_per_line, 16);
             assert!(view.offer_pulses);
+            assert!(!view.show_pulses);
         }
         assert_eq!(s.device.preferred_serial, None);
     }
@@ -261,6 +267,8 @@ mod tests {
         s.views.library.uppercase = false;
         s.views.library.bytes_per_line = 0;
         s.views.send.offer_pulses = false;
+        s.views.capture.show_pulses = true;
+        s.views.transfers.encoding = Encoding::Decimal;
         s.device.preferred_serial = Some("030820250001".into());
         assert_eq!(Settings::from_toml(&s.to_toml()), Ok(s));
     }
