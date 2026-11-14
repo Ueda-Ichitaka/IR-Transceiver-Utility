@@ -165,6 +165,16 @@ impl CaptureLog {
         }
     }
 
+    /// Changes the limit. A larger limit lets a full log store again; rows
+    /// already stored are kept under a smaller one.
+    pub fn set_limit(&mut self, limit_bytes: u64) {
+        let budget = usize::try_from(limit_bytes).unwrap_or(usize::MAX);
+        self.items.set_budget(budget);
+        if self.items.used() < budget {
+            self.full = false;
+        }
+    }
+
     /// True once the limit was reached; cleared by `clear`.
     pub fn is_full(&self) -> bool {
         self.full
@@ -333,6 +343,20 @@ mod tests {
         assert_eq!(log.apply(&chunk()), Applied::default(), "full is reported once");
         assert_eq!(log.transfer_count(), 2);
         assert_eq!(log.used_bytes(), 2 * (ROW_OVERHEAD as u64 + 64));
+    }
+
+    #[test]
+    fn raising_the_limit_resumes_storing() {
+        let mut log = CaptureLog::new(ROW_OVERHEAD as u64 + 4);
+        log.apply(&transfer(0, recorder::Event::Out(vec![0xFC; 4])));
+        log.apply(&transfer(0, recorder::Event::Out(vec![0xFC; 4])));
+        assert!(log.is_full());
+        log.set_limit(1 << 20);
+        assert!(!log.is_full());
+        assert!(log.apply(&transfer(0, recorder::Event::Out(vec![0xFC; 4]))).transfer_added);
+        log.set_limit(1);
+        assert_eq!(log.transfer_count(), 2, "rows are kept");
+        assert!(log.apply(&transfer(0, recorder::Event::Out(vec![0xFC; 4]))).became_full);
     }
 
     #[test]

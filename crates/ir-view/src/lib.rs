@@ -9,7 +9,8 @@
 //! maps a view's settings to its encoding switch, `send` turns the Send form
 //! into a session command, `library` describes and edits saved codes, `text`
 //! formats messages, `exchange` converts to and from LIRC, Flipper and Pronto,
-//! `files` picks export contents and recognises imported files.
+//! `files` picks export contents and recognises imported files, `settings_form`
+//! edits the settings.
 
 pub mod app;
 pub mod capture;
@@ -20,4 +21,5 @@ pub mod exchange;
 pub mod files;
 pub mod library;
 pub mod send;
+pub mod settings_form;
 pub mod text;

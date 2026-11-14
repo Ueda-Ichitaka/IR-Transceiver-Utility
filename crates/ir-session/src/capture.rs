@@ -103,6 +103,12 @@ impl<T: Weighted> CaptureBuffer<T> {
         self.items.get(index).map(|(_, item)| item)
     }
 
+    /// Changes the budget. Stored items are kept even when they exceed a
+    /// smaller budget; new items must fit the new budget.
+    pub fn set_budget(&mut self, budget: usize) {
+        self.budget = budget;
+    }
+
     /// Removes all items; sequence numbers keep increasing.
     pub fn clear(&mut self) {
         self.items.clear();
@@ -176,5 +182,18 @@ mod tests {
         assert!(b.is_empty());
         assert_eq!(b.used(), 0);
         assert_eq!(b.push(Item(1)), Pushed::Stored { seq: 1, evicted: 0 });
+    }
+
+    #[test]
+    fn budget_can_change_while_items_are_stored() {
+        let mut buf = CaptureBuffer::new(10, OverflowPolicy::Reject);
+        assert!(matches!(buf.push(Item(6)), Pushed::Stored { .. }));
+        buf.set_budget(4);
+        assert_eq!(buf.budget(), 4);
+        assert_eq!(buf.len(), 1, "stored items stay");
+        assert_eq!(buf.push(Item(1)), Pushed::Rejected);
+        buf.set_budget(20);
+        assert!(matches!(buf.push(Item(10)), Pushed::Stored { .. }));
+        assert_eq!(buf.used(), 16);
     }
 }
