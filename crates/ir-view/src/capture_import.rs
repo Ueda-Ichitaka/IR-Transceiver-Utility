@@ -149,7 +149,7 @@ fn csv_time(line: usize, text: &str) -> Result<Duration, String> {
     text.parse::<f64>().ok().and_then(seconds).ok_or_else(|| format!("line {line}: {text:?} is not a time"))
 }
 
-fn columns<'a>(line: usize, fields: &'a [String], count: usize) -> Result<&'a [String], String> {
+fn columns(line: usize, fields: &[String], count: usize) -> Result<&[String], String> {
     if fields.len() == count { Ok(fields) } else { Err(format!("line {line}: expected {count} fields")) }
 }
 
