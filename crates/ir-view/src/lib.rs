@@ -12,7 +12,8 @@
 //! into a session command, `library` describes and edits saved codes, `text`
 //! formats messages, `exchange` converts to and from LIRC, Flipper and Pronto,
 //! `files` picks export contents and recognises imported files, `settings_form`
-//! edits the settings, `replay` turns an elk-probe log into session events.
+//! edits the settings, `replay` turns an elk-probe log into session events,
+//! `hotplug` decides how to react to dongles being plugged in or out.
 
 pub mod app;
 pub mod capture;
@@ -23,6 +24,7 @@ pub mod device;
 pub mod display;
 pub mod exchange;
 pub mod files;
+pub mod hotplug;
 pub mod library;
 pub mod replay;
 pub mod send;

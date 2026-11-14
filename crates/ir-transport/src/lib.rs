@@ -11,9 +11,13 @@
 //! - [`endpoints`]: picks bulk OUT/IN endpoints from descriptors
 //! - [`ops`]: identify and learn sequences
 //! - [`usb`]: the nusb-backed transport for the real dongle
+//! - [`hotplug`]: reports when supported dongles are plugged in or out
+//! - [`env`]: the environment check (udev access, kernel driver, lircd)
 //! - [`probe`]: testable parts of the elk-probe tool
 
 pub mod endpoints;
+pub mod env;
+pub mod hotplug;
 pub mod mock;
 pub mod ops;
 pub mod probe;

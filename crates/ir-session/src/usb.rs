@@ -84,6 +84,7 @@ mod tests {
             address: 14,
             serial: serial.map(Into::into),
             product: product.map(Into::into),
+            sysfs_path: None,
         }
     }
 

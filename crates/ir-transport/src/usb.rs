@@ -34,6 +34,8 @@ pub struct DeviceSummary {
     pub address: u8,
     pub serial: Option<String>,
     pub product: Option<String>,
+    /// Sysfs directory of the device (Linux), e.g. `/sys/bus/usb/devices/3-2`.
+    pub sysfs_path: Option<std::path::PathBuf>,
 }
 
 /// Why the dongle could not be opened.
@@ -82,6 +84,7 @@ fn summary(info: &nusb::DeviceInfo) -> DeviceSummary {
         address: info.device_address(),
         serial: info.serial_number().map(str::to_string),
         product: info.product_string().map(str::to_string),
+        sysfs_path: Some(info.sysfs_path().to_path_buf()),
     }
 }
 
