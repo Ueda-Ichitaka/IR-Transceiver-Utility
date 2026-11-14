@@ -17,6 +17,8 @@ fn main_window_loads_offscreen() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_ir-transceiver"))
         .arg("--smoke-test")
         .env("QT_QPA_PLATFORM", "offscreen")
+        // Qt logs to the systemd journal when stderr is not a terminal.
+        .env("QT_FORCE_STDERR_LOGGING", "1")
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
