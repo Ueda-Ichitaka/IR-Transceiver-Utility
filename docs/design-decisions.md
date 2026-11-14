@@ -83,3 +83,10 @@ Options (a decision is needed):
 
 Recommendation: A, plus an upstream report to cmake-package and
 cxx-kde-frameworks.
+
+Option A was tried out (2026-11-14) and works on this machine: with
+`docs/patches/cmake-package-0.1.15-skip-cmake-targets.patch` (on branch
+`wip/app-skeleton`) applied through `[patch.crates-io]`, the app builds,
+shows the Kirigami window with KAboutData, KCrash and KI18n from
+cxx-kde-frameworks, and the offscreen smoke test passes. The branch holds
+that working skeleton without the patch applied.
