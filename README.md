@@ -11,11 +11,17 @@ them again.
 - **Capture**: learn one code or capture continuously. The Signals tab shows
   each received code with its protocol (NEC, NEC-extended, RC5/RC5X, RC6,
   Sony SIRC, Samsung32, Kaseikyo); the Transfers tab shows every USB transfer.
-  Each tab has its own encoding switch.
+  The selected row's detail panel shows all bytes, the pulse waveform,
+  duration and protocol guess. Each tab has its own encoding switch; times
+  are shown as time of day or seconds since connecting.
 - **Send**: learned codes, pulse timings, NEC address and command, or raw USB
-  bytes. Carrier frequency and repeat mode fall back to global defaults.
+  bytes, with a live check and a preview of the USB transfers. Carrier
+  frequency and repeat mode fall back to global defaults.
 - **Library**: named, tagged codes stored as TOML, with search and a tag
   filter.
+- **Device**: connection details, Identify, an environment check (udev
+  access, kernel driver, lircd) and the USB log. Dongles are connected when
+  plugged in.
 - **Import / export**: LIRC `lircd.conf` (raw codes), Flipper Zero `.ir`,
   Pronto hex; captures as JSON, CSV or the raw received byte stream.
 
