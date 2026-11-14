@@ -6,8 +6,9 @@
 //! decoders, scancode layouts from the Linux kernel RC documentation. NEC
 //! (including the extended addresses used by LED strip remotes) lives in
 //! [`crate::nec`]. Every decoder takes one frame as split by
-//! [`crate::frames::split`].
+//! [`crate::frames::split`]; [`encode`] builds frames from decoded values.
 
+pub mod encode;
 pub mod kaseikyo;
 pub mod manchester;
 pub mod rc5;
