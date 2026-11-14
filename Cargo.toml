@@ -37,6 +37,7 @@ ir-transport = { path = "crates/ir-transport" }
 ir-session = { path = "crates/ir-session" }
 ir-library = { path = "crates/ir-library" }
 ir-settings = { path = "crates/ir-settings" }
+ir-view = { path = "crates/ir-view" }
 
 # cmake-package passes header-only CMake targets such as Qt6::QmlIntegration
 # to rustc as link libraries, which breaks cxx-kde-frameworks. The patched

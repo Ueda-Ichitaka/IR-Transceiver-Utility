@@ -3,11 +3,15 @@
 //! Exists so the cxx-qt bridges live in a library that both the
 //! `ir-transceiver` binary and the tests link. [`run`] sets up the KDE
 //! application (KI18n domain, KCrash, KAboutData, desktop file name, Breeze
-//! style) and loads the Kirigami main window from the QML module.
+//! style), loads the Kirigami main window from the QML module and, when the
+//! window closes, stops the session worker.
 //! `--smoke-test` makes the window quit right after loading (used by
 //! tests/smoke.rs).
 
 pub mod app_info;
+pub mod capture_model;
+pub mod device_controller;
+pub mod state;
 
 use cxx_kde_frameworks::kcoreaddons::{KAboutData, License};
 use cxx_kde_frameworks::kcrash::KCrash;
@@ -47,4 +51,5 @@ pub fn run() {
     if let Some(app) = app.as_mut() {
         app.exec();
     }
+    state::shutdown();
 }
