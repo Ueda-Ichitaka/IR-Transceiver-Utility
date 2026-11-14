@@ -1,0 +1,13 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -287,6 +287,10 @@
+             writeln!(io, "cargo:rustc-link-arg={}", opt).unwrap();
+         });
+         self.link_libraries.iter().for_each(|lib| {
++            // Unresolved CMake targets (e.g. header-only Qt6::QmlIntegration) are not libraries.
++            if lib.contains("::") {
++                return;
++            }
+             if lib.starts_with("-") {
+                 writeln!(io, "cargo:rustc-link-arg={}", lib).unwrap();
+             } else {

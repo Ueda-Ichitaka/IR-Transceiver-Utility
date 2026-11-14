@@ -1,0 +1,73 @@
+# Changelog
+
+## 0.1.15 (2026-04-16)
+* Remove redundant cmake -D args in find_target and target_property (#125)
+* Add define() method to FindPackageBuilder (#124)
+* Detect static libraries in link() for Linux and MacOS (#123)
+
+## 0.1.14 (2026-03-25)
+* Migrate from Github to Codeberg
+* Replace Github Actions with Forgejo Actions
+* Update links/Github references
+
+## 0.1.13 (2026-03-14)
+* Add support for NAMES in find_package (#117)
+* Update dependencies
+
+## 0.1.12 (2026-02-16)
+* Add support for querying arbitrary target properties (#110)
+* Update dependencies
+
+## 0.1.11 (2026-02-05)
+* Add support for specifying CMAKE_PREFIX_PATH (#105)
+* Update dependencies
+
+## 0.1.10 (2025-12-10)
+* Support absolute library path on Darwin (#95)
+* Update dependencies
+
+## 0.1.9 (2025-08-30)
+* Avoid cmake version parsing in Rust (#83)
+* Update dependencies
+
+## 0.1.8 (2025-07-17)
+* Fix how versions are compared, required for CMake 4.x.x (#76)
+* Update dependencies
+
+## 0.1.7 (2025-05-30)
+
+* Fix parsing of cmake git versions (#70)
+* Update dependencies
+
+## 0.1.6 (2025-03-17)
+
+* Fix build on MacOS (#61), add MacOS CI
+* Update dependencies
+
+## 0.1.5 (2025-01-15)
+
+* Expose the LOCATION property of targets in public API (#48)
+* Actually return None when failing to find target (#47)
+* Updated dependencies
+
+## 0.1.4 (2024-12-27)
+
+* Set CLICOLOR to 0 when reading CMake version (#36) 
+* Dependency updates
+
+## 0.1.3 (2024-11-26)
+
+* Fix library names being misinterpreted as linker args (#27)
+* Extract rustc-link-search from library path (#25)
+
+## 0.1.2 (2024-10-24)
+
+* Fix arguments passed to the linker on both platforms
+
+## 0.1.1 (2024-10-19)
+
+* Fix typos and links in documentation
+
+## 0.1.0 (2024-10-19)
+
+* Initial release 🎉
