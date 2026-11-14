@@ -5,7 +5,9 @@
 //!
 //! Modules:
 //! - [`flipper`]: Flipper Zero `.ir` files
+//! - [`lirc`]: LIRC lircd.conf files with raw codes
 //! - [`pronto`]: Pronto hex, learned (0000) type
 
 pub mod flipper;
+pub mod lirc;
 pub mod pronto;
