@@ -2,7 +2,8 @@
 //
 // Kirigami application window with the sidebar (design decision 24) leading
 // to the pages, and the connection status always shown in the sidebar
-// footer. On start it connects to the first dongle found (design decision 9).
+// footer. On start it watches for dongles being plugged in and out and
+// connects to the first one found (design decision 9).
 // With --smoke-test it does not connect: it opens every page, replays the
 // recorded fixture into the capture page, logs markers and quits;
 // --smoke-screenshots=<dir> also saves pictures of the pages.
@@ -97,11 +98,29 @@ Kirigami.ApplicationWindow {
         ]
         footer: ColumnLayout {
             spacing: 0
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.smallSpacing
+                Rectangle {
+                    implicitWidth: Kirigami.Units.smallSpacing * 2
+                    implicitHeight: implicitWidth
+                    radius: width / 2
+                    color: DeviceController.ready ? Kirigami.Theme.positiveTextColor
+                        : DeviceController.canConnect ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.neutralTextColor
+                }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: DeviceController.sidebarLine
+                    elide: Text.ElideRight
+                }
+            }
             Controls.Label {
                 Layout.fillWidth: true
-                padding: Kirigami.Units.smallSpacing
-                text: DeviceController.stateLabel
-                font.bold: true
+                leftPadding: Kirigami.Units.smallSpacing
+                visible: DeviceController.location !== ""
+                text: DeviceController.location
+                font.family: "monospace"
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
                 elide: Text.ElideRight
             }
             Controls.Label {
@@ -167,6 +186,11 @@ Kirigami.ApplicationWindow {
         },
         function () {
             console.info("ir-transceiver: status " + DeviceController.captureStatus.slice(0, 4).join(", "));
+            root.showPage(devicePage);
+        },
+        function () {
+            root.smokeScreenshot(devicePage, "device");
+            console.info("ir-transceiver: environment " + DeviceController.envTexts.length + " checks");
         }
     ]
 
@@ -198,7 +222,9 @@ Kirigami.ApplicationWindow {
         if (smokeTest) {
             smokeSteps.start();
         } else {
-            DeviceController.connectDevice();
+            if (!DeviceController.startHotplug()) {
+                DeviceController.connectDevice();
+            }
         }
     }
 }

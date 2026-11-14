@@ -1,10 +1,12 @@
 //! `DeviceController`: the QML singleton for the dongle connection.
 //!
-//! Exists to give every page one object for the connection status (read from
-//! `ir_view::device::DeviceView`), the capture counters and the session
-//! commands. It starts the session worker on first connect; the worker's
-//! event batches are queued onto the GUI thread, applied to the app state
-//! and announced with `statusChanged` and `captureChanged`.
+//! Exists to give every page one object for the connection status and device
+//! facts (read from `ir_view::device::DeviceView`), the capture counters and
+//! status bar, the last send, the environment check and the session
+//! commands. It starts the session worker on first connect and the hotplug
+//! watcher on request; the worker's event batches and the watcher's reports
+//! are queued onto the GUI thread, applied to the app state and announced
+//! with `statusChanged`, `captureChanged` and `environmentChanged`.
 
 #[cxx_qt::bridge]
 pub mod qobject {
@@ -13,6 +15,8 @@ pub mod qobject {
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qstringlist.h");
         type QStringList = cxx_qt_lib::QStringList;
+        include!("cxx-qt-lib/qlist.h");
+        type QList_i32 = cxx_qt_lib::QList<i32>;
     }
 
     #[auto_cxx_name]
@@ -28,6 +32,14 @@ pub mod qobject {
         #[qproperty(QString, last_sent, READ = last_sent, NOTIFY = status_changed)]
         #[qproperty(f64, last_send_wall_ms, READ = last_send_wall_ms, NOTIFY = status_changed)]
         #[qproperty(QString, last_send_text, READ = last_send_text, NOTIFY = status_changed)]
+        #[qproperty(QString, sidebar_line, READ = sidebar_line, NOTIFY = status_changed)]
+        #[qproperty(QString, location, READ = location, NOTIFY = status_changed)]
+        #[qproperty(QStringList, fact_labels, READ = fact_labels, NOTIFY = status_changed)]
+        #[qproperty(QStringList, fact_values, READ = fact_values, NOTIFY = status_changed)]
+        #[qproperty(f64, connected_since_ms, READ = connected_since_ms, NOTIFY = status_changed)]
+        #[qproperty(i32, error_count, READ = error_count, NOTIFY = status_changed)]
+        #[qproperty(QList_i32, env_levels, READ = env_levels, NOTIFY = environment_changed)]
+        #[qproperty(QStringList, env_texts, READ = env_texts, NOTIFY = environment_changed)]
         #[qproperty(bool, can_connect, READ = can_connect, NOTIFY = status_changed)]
         #[qproperty(bool, can_disconnect, READ = can_disconnect, NOTIFY = status_changed)]
         #[qproperty(bool, ready, READ = ready, NOTIFY = status_changed)]
@@ -50,6 +62,14 @@ pub mod qobject {
         fn last_sent(self: &DeviceController) -> QString;
         fn last_send_wall_ms(self: &DeviceController) -> f64;
         fn last_send_text(self: &DeviceController) -> QString;
+        fn sidebar_line(self: &DeviceController) -> QString;
+        fn location(self: &DeviceController) -> QString;
+        fn fact_labels(self: &DeviceController) -> QStringList;
+        fn fact_values(self: &DeviceController) -> QStringList;
+        fn connected_since_ms(self: &DeviceController) -> f64;
+        fn error_count(self: &DeviceController) -> i32;
+        fn env_levels(self: &DeviceController) -> QList_i32;
+        fn env_texts(self: &DeviceController) -> QStringList;
         fn can_connect(self: &DeviceController) -> bool;
         fn can_disconnect(self: &DeviceController) -> bool;
         fn ready(self: &DeviceController) -> bool;
@@ -67,6 +87,19 @@ pub mod qobject {
         fn status_changed(self: Pin<&mut DeviceController>);
         #[qsignal]
         fn capture_changed(self: Pin<&mut DeviceController>);
+        #[qsignal]
+        fn environment_changed(self: Pin<&mut DeviceController>);
+
+        /// Asks the dongle for its protocol again.
+        #[qinvokable]
+        fn identify(self: Pin<&mut DeviceController>);
+        /// Runs the environment check again.
+        #[qinvokable]
+        fn refresh_environment(self: Pin<&mut DeviceController>);
+        /// Starts watching for dongles being plugged in and out; connects
+        /// when one is present. False when the watcher cannot start.
+        #[qinvokable]
+        fn start_hotplug(self: Pin<&mut DeviceController>) -> bool;
 
         /// Connects to the first supported dongle.
         #[qinvokable]
@@ -104,9 +137,11 @@ pub mod qobject {
 
 use std::pin::Pin;
 use cxx_qt::Threading;
-use cxx_qt_lib::{QString, QStringList};
+use cxx_qt_lib::{QList, QString, QStringList};
 use ir_session::session::{Command, Event, Session};
 use ir_session::usb::UsbConnector;
+use ir_transport::usb::{self, DeviceSummary};
+use ir_transport::{env, hotplug};
 use ir_session::worker;
 use ir_library::model::{Code, Payload};
 use ir_view::app::Update;
@@ -213,7 +248,8 @@ impl qobject::DeviceController {
         parts.iter().collect()
     }
 
-    fn connect_device(self: Pin<&mut Self>) {
+    /// Starts the session worker if it is not running yet.
+    fn ensure_session(&self) {
         let thread = self.qt_thread();
         state::with(|s| {
             if s.session.is_none() {
@@ -224,7 +260,103 @@ impl qobject::DeviceController {
                 }));
             }
         });
+    }
+
+    fn connect_device(self: Pin<&mut Self>) {
+        self.ensure_session();
         self.send(Command::Connect);
+    }
+
+    fn identify(self: Pin<&mut Self>) {
+        self.send(Command::Identify);
+    }
+
+    fn sidebar_line(&self) -> QString {
+        state::with(|s| QString::from(&s.core.device.sidebar_line()))
+    }
+
+    fn location(&self) -> QString {
+        state::with(|s| qs(s.core.device.location()))
+    }
+
+    fn fact_labels(&self) -> QStringList {
+        let labels: Vec<QString> = state::with(|s| s.core.device.facts().iter().map(|(l, _)| QString::from(l)).collect());
+        labels.iter().collect()
+    }
+
+    fn fact_values(&self) -> QStringList {
+        let values: Vec<QString> = state::with(|s| s.core.device.facts().iter().map(|(_, v)| QString::from(v)).collect());
+        values.iter().collect()
+    }
+
+    fn connected_since_ms(&self) -> f64 {
+        state::with(|s| s.core.device.connected_since_ms().map_or(-1.0, |ms| ms as f64))
+    }
+
+    fn error_count(&self) -> i32 {
+        state::with(|s| count(s.core.device.error_count()))
+    }
+
+    fn environment(&self) -> Vec<env::Check> {
+        state::with(|s| env::run(&s.devices, env::Roots::system(), s.hotplug_active))
+    }
+
+    fn env_levels(&self) -> QList<i32> {
+        self.environment()
+            .iter()
+            .map(|c| match c.level {
+                env::Level::Ok => 0,
+                env::Level::Warning => 1,
+                env::Level::Problem => 2,
+            })
+            .collect()
+    }
+
+    fn env_texts(&self) -> QStringList {
+        let texts: Vec<QString> = self.environment().iter().map(|c| QString::from(&c.text)).collect();
+        texts.iter().collect()
+    }
+
+    fn refresh_environment(self: Pin<&mut Self>) {
+        let hotplug = state::with(|s| s.hotplug_active);
+        if !hotplug {
+            // Without the watcher, list the dongles now.
+            let devices = usb::list().unwrap_or_default();
+            state::with(|s| s.devices = devices);
+        }
+        self.environment_changed();
+    }
+
+    fn start_hotplug(self: Pin<&mut Self>) -> bool {
+        let thread = self.qt_thread();
+        let started = hotplug::spawn(move |devices| {
+            let _ = thread.queue(move |controller| controller.devices_changed(devices));
+        });
+        match started {
+            Ok(()) => {
+                state::with(|s| s.hotplug_active = true);
+                true
+            }
+            Err(message) => {
+                self.apply_events(vec![Event::Error(message)]);
+                false
+            }
+        }
+    }
+
+    /// The hotplug watcher reported the dongles now present.
+    fn devices_changed(mut self: Pin<&mut Self>, devices: Vec<DeviceSummary>) {
+        let present = devices.len();
+        let command = state::with(|s| {
+            s.devices = devices;
+            ir_view::hotplug::command(present, s.core.device.state())
+        });
+        match command {
+            Some(Command::Connect) => self.as_mut().connect_device(),
+            Some(command) => self.as_mut().send(command),
+            None => {}
+        }
+        self.environment_changed();
     }
 
     fn disconnect_device(self: Pin<&mut Self>) {

@@ -3,8 +3,8 @@
 //! Exists because several QML objects (the device controller singleton and
 //! the capture list models) show the same data: it lives once, in a
 //! thread-local `AppState` on the GUI thread, holding the Qt-free `AppCore`,
-//! the code library, the settings and library file paths and the session
-//! worker. `with` must not be nested
+//! the code library, the settings and library file paths, the session
+//! worker and the dongles reported by the hotplug watcher. `with` must not be nested
 //! and Qt signals are emitted only after it returns, so a QML handler can
 //! call back into Rust safely.
 
@@ -16,6 +16,7 @@ use ir_library::model::Library;
 use ir_library::store;
 use ir_session::session::{Command, Event};
 use ir_transport::recorder::now_unix_ms;
+use ir_transport::usb::DeviceSummary;
 use ir_view::send::{wire, wire_summary};
 use ir_session::worker::SessionHandle;
 use ir_settings::Settings;
@@ -27,6 +28,9 @@ pub struct AppState {
     pub core: AppCore,
     pub library: Library,
     pub session: Option<SessionHandle>,
+    /// Supported dongles last reported by the hotplug watcher.
+    pub devices: Vec<DeviceSummary>,
+    pub hotplug_active: bool,
     settings_path: Option<PathBuf>,
     library_path: Option<PathBuf>,
 }
@@ -78,7 +82,7 @@ impl AppState {
         for message in [message, library_message].into_iter().flatten() {
             core.apply(&[Event::Error(message)]);
         }
-        Self { core, library, session: None, settings_path, library_path }
+        Self { core, library, session: None, devices: Vec::new(), hotplug_active: false, settings_path, library_path }
     }
 
     /// Hands a transmit command to the session and records it as the last

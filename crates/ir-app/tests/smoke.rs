@@ -79,6 +79,7 @@ fn main_window_loads_offscreen() {
         "ir-transceiver: imported 1 signals",
         "ir-transceiver: send hint 44 pulses at 38000 Hz, ",
         "ir-transceiver: status Not capturing, 0 frames, 1 IR code, 0 short reads",
+        "ir-transceiver: environment 4 checks",
     ] {
         assert!(stderr.contains(row), "{row:?} missing, stderr:\n{stderr}");
     }
