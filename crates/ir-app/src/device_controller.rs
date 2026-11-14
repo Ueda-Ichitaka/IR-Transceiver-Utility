@@ -26,6 +26,8 @@ pub mod qobject {
         #[qproperty(QString, banner, READ = banner, NOTIFY = status_changed)]
         #[qproperty(QString, last_error, READ = last_error, NOTIFY = status_changed)]
         #[qproperty(QString, last_sent, READ = last_sent, NOTIFY = status_changed)]
+        #[qproperty(f64, last_send_wall_ms, READ = last_send_wall_ms, NOTIFY = status_changed)]
+        #[qproperty(QString, last_send_text, READ = last_send_text, NOTIFY = status_changed)]
         #[qproperty(bool, can_connect, READ = can_connect, NOTIFY = status_changed)]
         #[qproperty(bool, can_disconnect, READ = can_disconnect, NOTIFY = status_changed)]
         #[qproperty(bool, ready, READ = ready, NOTIFY = status_changed)]
@@ -46,6 +48,8 @@ pub mod qobject {
         fn banner(self: &DeviceController) -> QString;
         fn last_error(self: &DeviceController) -> QString;
         fn last_sent(self: &DeviceController) -> QString;
+        fn last_send_wall_ms(self: &DeviceController) -> f64;
+        fn last_send_text(self: &DeviceController) -> QString;
         fn can_connect(self: &DeviceController) -> bool;
         fn can_disconnect(self: &DeviceController) -> bool;
         fn ready(self: &DeviceController) -> bool;
@@ -84,6 +88,9 @@ pub mod qobject {
         /// the dongle had sent it (used by the smoke test).
         #[qinvokable]
         fn replay_fixture(self: Pin<&mut DeviceController>);
+        /// Re-reads the connection status and last send (after a send).
+        #[qinvokable]
+        fn refresh_status(self: Pin<&mut DeviceController>);
         /// Re-reads the capture counters and usage (after the limit changed).
         #[qinvokable]
         fn refresh_capture(self: Pin<&mut DeviceController>);
@@ -104,6 +111,7 @@ use ir_session::worker;
 use ir_library::model::{Code, Payload};
 use ir_view::app::Update;
 use ir_view::send::command_for;
+use ir_view::text::capitalise;
 use ir_view::capture::usage_text;
 use ir_view::capture_view::status_parts;
 use ir_transport::recorder::now_unix_ms;
@@ -142,6 +150,18 @@ impl qobject::DeviceController {
 
     fn last_error(&self) -> QString {
         state::with(|s| qs(s.core.device.last_error()))
+    }
+
+    fn last_send_wall_ms(&self) -> f64 {
+        state::with(|s| s.core.last_send().map_or(-1.0, |l| l.wall_ms as f64))
+    }
+
+    fn last_send_text(&self) -> QString {
+        state::with(|s| QString::from(&s.core.last_send().map(|l| l.text()).unwrap_or_default()))
+    }
+
+    fn refresh_status(self: Pin<&mut Self>) {
+        self.status_changed();
     }
 
     fn last_sent(&self) -> QString {
@@ -255,10 +275,14 @@ impl qobject::DeviceController {
             };
             Some(command_for(&code, &s.core.settings.send_defaults()))
         });
-        match command {
-            Some(Ok(command)) => self.send(command),
-            Some(Err(message)) => self.apply_events(vec![Event::Error(message)]),
-            None => {}
+        let result = match command {
+            Some(Ok(command)) => state::with(|s| s.send_command(command)),
+            Some(Err(message)) => Err(message),
+            None => return,
+        };
+        match result {
+            Ok(()) => self.status_changed(),
+            Err(message) => self.apply_events(vec![Event::Error(capitalise(&message))]),
         }
     }
 

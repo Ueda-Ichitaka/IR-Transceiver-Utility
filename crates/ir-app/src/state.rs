@@ -14,7 +14,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use ir_library::model::Library;
 use ir_library::store;
-use ir_session::session::Event;
+use ir_session::session::{Command, Event};
+use ir_transport::recorder::now_unix_ms;
+use ir_view::send::{wire, wire_summary};
 use ir_session::worker::SessionHandle;
 use ir_settings::Settings;
 use ir_view::app::AppCore;
@@ -77,6 +79,19 @@ impl AppState {
             core.apply(&[Event::Error(message)]);
         }
         Self { core, library, session: None, settings_path, library_path }
+    }
+
+    /// Hands a transmit command to the session and records it as the last
+    /// send; the message says why not when there is nothing to send or no
+    /// dongle.
+    pub fn send_command(&mut self, command: Command) -> Result<(), String> {
+        let chunks = wire(&command)?;
+        match &self.session {
+            Some(session) if session.send(command) => {}
+            _ => return Err("the dongle is not connected".into()),
+        }
+        self.core.sending(wire_summary(&chunks), now_unix_ms());
+        Ok(())
     }
 
     /// Writes the library; a failure is returned as a message.

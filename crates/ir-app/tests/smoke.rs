@@ -77,6 +77,7 @@ fn main_window_loads_offscreen() {
         "ir-transceiver: code NEC addr 0x00 cmd 0x59 | NEC addr 0x00 cmd 0x59, NEC repeat x5 · default carrier · 216 B",
         "ir-transceiver: row 1 | IR 2 B | 23 37",
         "ir-transceiver: imported 1 signals",
+        "ir-transceiver: send hint 44 pulses at 38000 Hz, ",
         "ir-transceiver: status Not capturing, 0 frames, 1 IR code, 0 short reads",
     ] {
         assert!(stderr.contains(row), "{row:?} missing, stderr:\n{stderr}");

@@ -5,7 +5,7 @@
 // footer. On start it connects to the first dongle found (design decision 9).
 // With --smoke-test it does not connect: it opens every page, replays the
 // recorded fixture into the capture page, logs markers and quits;
-// --smoke-screenshots=<dir> also saves pictures of the capture page.
+// --smoke-screenshots=<dir> also saves pictures of the pages.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
@@ -119,12 +119,12 @@ Kirigami.ApplicationWindow {
     // Smoke test: one step per timer tick, so each page and list is laid
     // out and rendered before the next step. First every page is shown, then
     // the capture page is exercised with the recorded fixture.
-    // With --smoke-screenshots=<dir>, saves the capture page as <dir>/<name>.png.
-    function smokeScreenshot(name) {
+    // With --smoke-screenshots=<dir>, saves `item` as <dir>/<name>.png.
+    function smokeScreenshot(item, name) {
         const arg = Qt.application.arguments.find(a => a.startsWith("--smoke-screenshots="));
         if (arg) {
             const path = arg.substring("--smoke-screenshots=".length) + "/" + name + ".png";
-            capturePage.grabToImage(result => result.saveToFile(path));
+            item.grabToImage(result => result.saveToFile(path));
         }
     }
 
@@ -136,18 +136,25 @@ Kirigami.ApplicationWindow {
             capturePage.selectRow(0);
         },
         function () {
-            root.smokeScreenshot("capture-signals");
+            root.smokeScreenshot(capturePage, "capture-signals");
         },
         function () {
             capturePage.showTab(1);
             capturePage.selectRow(1);
         },
         function () {
-            root.smokeScreenshot("capture-transfers");
+            root.smokeScreenshot(capturePage, "capture-transfers");
         },
         function () {
             LibraryModel.saveSignal(0);
             root.showPage(libraryPage);
+        },
+        function () {
+            root.showPage(sendPage);
+            sendPage.smokeLoadFirstCode();
+        },
+        function () {
+            root.smokeScreenshot(sendPage, "send");
         },
         function () {
             const arg = Qt.application.arguments.find(a => a.startsWith("--smoke-import="));

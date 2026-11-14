@@ -148,6 +148,13 @@ pub fn wire_summary(chunks: &[Vec<u8>]) -> String {
     format!("{bytes} bytes in {} {unit}", chunks.len())
 }
 
+/// `text` converted from one encoding to another; `None` when it does not
+/// parse (it is then kept as typed).
+pub fn reencode(text: &str, from: Encoding, to: Encoding) -> Option<String> {
+    let bytes = ir_codec::parse(text, from).ok()?;
+    Some(ir_codec::format(&bytes, to, &FormatOptions { uppercase: true, bytes_per_line: 0 }))
+}
+
 impl SendForm {
     /// The form filled from a library code, bytes in `encoding`.
     pub fn from_code(code: &Code, encoding: Encoding) -> Self {
@@ -405,5 +412,13 @@ mod tests {
             assert_eq!(parts, (payload, Some(36_000), Some(RepeatMode::FirstFrame { count: 2 })));
         }
         assert!(SendForm { carrier_text: "x".into(), ..form(PayloadKind::Raw) }.code_parts().is_err());
+    }
+
+    #[test]
+    fn bytes_follow_the_encoding_switch() {
+        assert_eq!(reencode("23 37", Encoding::Hex, Encoding::Decimal), Some("35 55".into()));
+        assert_eq!(reencode("35 55", Encoding::Decimal, Encoding::Hex), Some("23 37".into()));
+        assert_eq!(reencode("", Encoding::Hex, Encoding::Binary), Some(String::new()));
+        assert_eq!(reencode("2", Encoding::Hex, Encoding::Decimal), None);
     }
 }

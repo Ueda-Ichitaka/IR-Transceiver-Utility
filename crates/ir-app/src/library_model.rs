@@ -283,10 +283,7 @@ impl qobject::LibraryModel {
         let result = state::with(|s| {
             let code = id_of(id).and_then(|id| s.library.get(id)).ok_or("the code no longer exists")?;
             let command = command_for(code, &s.core.settings.send_defaults())?;
-            match &s.session {
-                Some(session) if session.send(command) => Ok(()),
-                _ => Err("the dongle is not connected".to_string()),
-            }
+            s.send_command(command)
         });
         let message = result.as_ref().err().map_or_else(String::new, |e| capitalise(e));
         self.as_mut().set_error(QString::from(&message));
