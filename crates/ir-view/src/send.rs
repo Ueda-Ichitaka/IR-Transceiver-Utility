@@ -4,9 +4,12 @@
 //! pulse timings, NEC address and command, or raw USB bytes; decision 11: raw
 //! bytes always offered) into a session command, applying the global carrier
 //! and repeat defaults unless the form overrides them (decisions 12, 13).
-//! Parsing errors are returned as messages for the page.
+//! Parsing errors are returned as messages for the page. It also gives the
+//! live hint under the data field, the wire preview (the USB transfers a
+//! command produces) and converts between the form and library codes.
 
-use ir_codec::Encoding;
+use elk_proto::transmit::{self, TransmitError};
+use ir_codec::{Encoding, FormatOptions};
 use ir_library::model::{Code, Payload, RepeatMode};
 use ir_library::send::{self, Defaults, PrepareError, Prepared};
 use ir_session::session::Command;
@@ -121,7 +124,80 @@ pub fn command_for(code: &Code, defaults: &Defaults) -> Result<Command, String> 
     }
 }
 
+/// The USB OUT transfers a command produces (header and chunks for a
+/// transmit, the bytes themselves for raw).
+pub fn wire(command: &Command) -> Result<Vec<Vec<u8>>, String> {
+    match command {
+        Command::Transmit { pulses, frequency_hz } => {
+            transmit::transmit_chunks(*frequency_hz, pulses).map_err(|e| match e {
+                TransmitError::Empty => "nothing to send".to_string(),
+                TransmitError::TooLong(n) => {
+                    format!("the code is too long for the dongle ({n} bytes compressed, at most {})", transmit::MAX_PAYLOAD)
+                }
+            })
+        }
+        Command::TransmitRaw { bytes } if !bytes.is_empty() => Ok(vec![bytes.clone()]),
+        _ => Err("nothing to send".into()),
+    }
+}
+
+/// `82 bytes in 2 chunks`.
+pub fn wire_summary(chunks: &[Vec<u8>]) -> String {
+    let bytes: usize = chunks.iter().map(Vec::len).sum();
+    let unit = if chunks.len() == 1 { "chunk" } else { "chunks" };
+    format!("{bytes} bytes in {} {unit}", chunks.len())
+}
+
 impl SendForm {
+    /// The form filled from a library code, bytes in `encoding`.
+    pub fn from_code(code: &Code, encoding: Encoding) -> Self {
+        let bytes = |data: &[u8]| ir_codec::format(data, encoding, &FormatOptions { uppercase: true, bytes_per_line: 0 });
+        let mut form = SendForm {
+            encoding,
+            carrier_text: code.carrier_hz.map_or_else(String::new, |hz| hz.to_string()),
+            repeat: code.repeat,
+            ..SendForm::default()
+        };
+        match &code.payload {
+            Payload::Learned { data } => {
+                form.kind = PayloadKind::Learned;
+                form.bytes_text = bytes(data);
+            }
+            Payload::Raw { data } => {
+                form.kind = PayloadKind::Raw;
+                form.bytes_text = bytes(data);
+            }
+            Payload::Pulses { pulses } => {
+                form.kind = PayloadKind::Pulses;
+                form.pulses_text = pulses.iter().map(|[on, off]| format!("{on}/{off}")).collect::<Vec<_>>().join(" ");
+            }
+            Payload::Nec { address, command, extended } => {
+                form.kind = PayloadKind::Nec;
+                form.nec_address = if *extended { format!("{address:04X}") } else { format!("{address:02X}") };
+                form.nec_command = format!("{command:02X}");
+                form.nec_extended = *extended;
+            }
+        }
+        form
+    }
+
+    /// One line under the data field: what will be sent, or why not.
+    pub fn hint(&self, defaults: &Defaults) -> Result<String, String> {
+        let command = self.command(defaults)?;
+        let chunks = wire(&command)?;
+        let what = match &command {
+            Command::Transmit { pulses, frequency_hz } => format!("{} pulses at {frequency_hz} Hz", pulses.len()),
+            Command::TransmitRaw { bytes } => format!("{} raw bytes", bytes.len()),
+            _ => String::new(),
+        };
+        Ok(format!("{what}, {}", wire_summary(&chunks)))
+    }
+
+    /// The payload and overrides for saving the form as a library code.
+    pub fn code_parts(&self) -> Result<(Payload, Option<u32>, Option<RepeatMode>), String> {
+        Ok((self.payload()?, parse_carrier(&self.carrier_text)?, self.repeat))
+    }
+
     /// The payload described by the form.
     pub fn payload(&self) -> Result<Payload, String> {
         let bytes = || ir_codec::parse(&self.bytes_text, self.encoding).map_err(|e| e.to_string());
@@ -267,5 +343,67 @@ mod tests {
         assert_eq!(form(PayloadKind::Learned).command(&DEFAULTS), Err("nothing to send".into()));
         let bad = SendForm { bytes_text: "23 FF".into(), ..form(PayloadKind::Learned) };
         assert_eq!(bad.command(&DEFAULTS), Err("the learned bytes do not decode into pulses".into()));
+    }
+
+    #[test]
+    fn wire_of_transmit_and_raw_commands() {
+        let pulses = nec::encode_command(0, 0x59, false);
+        let chunks = wire(&Command::Transmit { pulses: pulses.clone(), frequency_hz: 38_000 }).unwrap();
+        assert_eq!(chunks, elk_proto::transmit::transmit_chunks(38_000, &pulses).unwrap());
+        assert_eq!(wire(&Command::TransmitRaw { bytes: vec![0xFC; 4] }), Ok(vec![vec![0xFC; 4]]));
+        assert_eq!(wire(&Command::Connect), Err("nothing to send".into()));
+        assert_eq!(wire(&Command::Transmit { pulses: vec![], frequency_hz: 38_000 }), Err("nothing to send".into()));
+    }
+
+    #[test]
+    fn wire_summaries() {
+        assert_eq!(wire_summary(&[vec![0; 63], vec![0; 19]]), "82 bytes in 2 chunks");
+        assert_eq!(wire_summary(&[vec![0; 4]]), "4 bytes in 1 chunk");
+    }
+
+    #[test]
+    fn hints_say_what_is_sent_or_why_not() {
+        let nec_form = SendForm { nec_address: "0".into(), nec_command: "59".into(), ..form(PayloadKind::Nec) };
+        let chunks = wire(&nec_form.command(&DEFAULTS).unwrap()).unwrap();
+        assert_eq!(nec_form.hint(&DEFAULTS), Ok(format!("34 pulses at 38000 Hz, {}", wire_summary(&chunks))));
+        let raw = SendForm { bytes_text: "FC FC FC FC".into(), ..form(PayloadKind::Raw) };
+        assert_eq!(raw.hint(&DEFAULTS), Ok("4 raw bytes, 4 bytes in 1 chunk".into()));
+        let bad = SendForm { nec_address: "zz".into(), ..form(PayloadKind::Nec) };
+        assert_eq!(bad.hint(&DEFAULTS), Err("address: \"zz\" is not a hex number".into()));
+    }
+
+    fn library_code(payload: Payload) -> Code {
+        Code { id: 7, name: "x".into(), tags: vec![], carrier_hz: Some(36_000), repeat: Some(RepeatMode::FirstFrame { count: 2 }), payload, notes: String::new() }
+    }
+
+    #[test]
+    fn forms_load_library_codes() {
+        let learned = SendForm::from_code(&library_code(Payload::Learned { data: vec![0x23, 0x37] }), Encoding::Decimal);
+        assert_eq!((learned.kind, learned.bytes_text.as_str(), learned.encoding), (PayloadKind::Learned, "35 55", Encoding::Decimal));
+        assert_eq!((learned.carrier_text.as_str(), learned.repeat), ("36000", Some(RepeatMode::FirstFrame { count: 2 })));
+        let pulses = SendForm::from_code(&library_code(Payload::Pulses { pulses: vec![[9000, 4500], [560, 0]] }), Encoding::Hex);
+        assert_eq!((pulses.kind, pulses.pulses_text.as_str()), (PayloadKind::Pulses, "9000/4500 560/0"));
+        let nec_code = SendForm::from_code(&library_code(Payload::Nec { address: 0xEF00, command: 3, extended: true }), Encoding::Hex);
+        assert_eq!(
+            (nec_code.kind, nec_code.nec_address.as_str(), nec_code.nec_command.as_str(), nec_code.nec_extended),
+            (PayloadKind::Nec, "EF00", "03", true)
+        );
+        let raw = SendForm::from_code(&library_code(Payload::Raw { data: vec![0xFC] }), Encoding::Hex);
+        assert_eq!((raw.kind, raw.bytes_text.as_str()), (PayloadKind::Raw, "FC"));
+    }
+
+    #[test]
+    fn loaded_codes_round_trip_through_code_parts() {
+        for payload in [
+            Payload::Learned { data: vec![0x23, 0x37] },
+            Payload::Pulses { pulses: vec![[9000, 4500], [560, 0]] },
+            Payload::Nec { address: 0x04, command: 0x08, extended: false },
+            Payload::Raw { data: vec![0xFC; 4] },
+        ] {
+            let code = library_code(payload.clone());
+            let parts = SendForm::from_code(&code, Encoding::Base64).code_parts().unwrap();
+            assert_eq!(parts, (payload, Some(36_000), Some(RepeatMode::FirstFrame { count: 2 })));
+        }
+        assert!(SendForm { carrier_text: "x".into(), ..form(PayloadKind::Raw) }.code_parts().is_err());
     }
 }

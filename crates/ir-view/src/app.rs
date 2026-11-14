@@ -3,7 +3,8 @@
 //! Exists so the cxx-qt objects only forward: `AppCore::apply` updates the
 //! device view and the capture log from the events the session worker
 //! delivers, and reports what changed and whether capture must stop because
-//! the capture limit was reached.
+//! the capture limit was reached. It also tracks the capture start and the
+//! outcome of the last send.
 
 use std::time::Instant;
 
@@ -20,6 +21,36 @@ pub struct AppCore {
     pub capture: CaptureLog,
     pub settings: Settings,
     capture_started: Option<Instant>,
+    last_send: Option<LastSend>,
+}
+
+/// The last code handed to the session for sending.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LastSend {
+    /// When it was sent, in Unix milliseconds.
+    pub wall_ms: u64,
+    /// What went over USB, e.g. `82 bytes in 2 chunks`.
+    pub wire: String,
+    pub outcome: SendOutcome,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SendOutcome {
+    Pending,
+    Ok,
+    Failed(String),
+}
+
+impl LastSend {
+    /// `82 bytes in 2 chunks · ok` (the time is formatted by the page).
+    pub fn text(&self) -> String {
+        let outcome = match &self.outcome {
+            SendOutcome::Pending => "sending".to_string(),
+            SendOutcome::Ok => "ok".to_string(),
+            SendOutcome::Failed(reason) => format!("failed: {reason}"),
+        };
+        format!("{} · {outcome}", self.wire)
+    }
 }
 
 /// What a batch of events changed.
@@ -46,7 +77,30 @@ impl AppCore {
             capture: CaptureLog::new(settings.capture_limit_bytes()),
             settings,
             capture_started: None,
+            last_send: None,
         }
+    }
+
+    /// Notes that a send with `wire` was handed to the session.
+    pub fn sending(&mut self, wire: String, wall_ms: u64) {
+        self.last_send = Some(LastSend { wall_ms, wire, outcome: SendOutcome::Pending });
+    }
+
+    pub fn last_send(&self) -> Option<&LastSend> {
+        self.last_send.as_ref()
+    }
+
+    /// Resolves a pending send from a session event; true when it changed.
+    fn resolve_send(&mut self, event: &Event) -> bool {
+        let Some(send) = self.last_send.as_mut().filter(|s| s.outcome == SendOutcome::Pending) else {
+            return false;
+        };
+        send.outcome = match event {
+            Event::Transmitted { .. } | Event::RawSent { .. } => SendOutcome::Ok,
+            Event::Error(reason) => SendOutcome::Failed(reason.clone()),
+            _ => return false,
+        };
+        true
     }
 
     /// How long the current capture has been running.
@@ -58,6 +112,7 @@ impl AppCore {
         let mut update = Update::default();
         for event in events {
             update.status_changed |= self.device.apply(event);
+            update.status_changed |= self.resolve_send(event);
             if let Event::State(state) = event {
                 self.capture_started = match (state, self.capture_started) {
                     (State::Capturing, Some(start)) => Some(start),
@@ -151,6 +206,27 @@ mod tests {
         assert!(core.capturing_for().unwrap() < std::time::Duration::from_secs(1), "kept from the first event");
         core.apply(&[Event::State(State::Recovering)]);
         assert!(core.capturing_for().is_none());
+    }
+
+    #[test]
+    fn last_send_is_resolved_by_the_session() {
+        let mut core = AppCore::new(Settings::default());
+        assert_eq!(core.last_send(), None);
+        core.sending("82 bytes in 2 chunks".into(), 1000);
+        assert_eq!(core.last_send().unwrap().text(), "82 bytes in 2 chunks · sending");
+        assert!(core.apply(&[Event::Transmitted { pulses: 34 }]).status_changed);
+        let sent = core.last_send().unwrap();
+        assert_eq!((sent.wall_ms, sent.outcome.clone()), (1000, SendOutcome::Ok));
+        assert_eq!(sent.text(), "82 bytes in 2 chunks · ok");
+
+        core.sending("4 bytes in 1 chunk".into(), 2000);
+        core.apply(&[Event::Error("transmit failed: USB error".into())]);
+        assert_eq!(core.last_send().unwrap().text(), "4 bytes in 1 chunk · failed: transmit failed: USB error");
+
+        core.sending("4 bytes in 1 chunk".into(), 3000);
+        core.apply(&[Event::RawSent { bytes: 4 }]);
+        core.apply(&[Event::Error("unrelated later error".into())]);
+        assert_eq!(core.last_send().unwrap().outcome, SendOutcome::Ok, "only a pending send can fail");
     }
 
     #[test]
