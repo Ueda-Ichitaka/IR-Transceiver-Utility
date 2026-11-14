@@ -21,6 +21,7 @@ Kirigami.ApplicationWindow {
     readonly property bool smokeTest: Qt.application.arguments.indexOf("--smoke-test") >= 0
     readonly property var pages: [
         { name: "Capture", page: capturePage },
+        { name: "Send", page: sendPage },
         { name: "Device", page: devicePage }
     ]
 
@@ -41,6 +42,11 @@ Kirigami.ApplicationWindow {
         visible: false
     }
 
+    SendPage {
+        id: sendPage
+        visible: false
+    }
+
     DevicePage {
         id: devicePage
         visible: false
@@ -58,7 +64,7 @@ Kirigami.ApplicationWindow {
             Kirigami.Action {
                 text: i18nc("@action:inmenu", "Send")
                 icon.name: "document-send"
-                enabled: false
+                onTriggered: root.showPage(sendPage)
             },
             Kirigami.Action {
                 text: i18nc("@action:inmenu", "Library")

@@ -23,6 +23,7 @@ pub mod qobject {
         #[qproperty(QString, protocol, READ = protocol, NOTIFY = status_changed)]
         #[qproperty(QString, banner, READ = banner, NOTIFY = status_changed)]
         #[qproperty(QString, last_error, READ = last_error, NOTIFY = status_changed)]
+        #[qproperty(QString, last_sent, READ = last_sent, NOTIFY = status_changed)]
         #[qproperty(bool, can_connect, READ = can_connect, NOTIFY = status_changed)]
         #[qproperty(bool, can_disconnect, READ = can_disconnect, NOTIFY = status_changed)]
         #[qproperty(bool, ready, READ = ready, NOTIFY = status_changed)]
@@ -41,6 +42,7 @@ pub mod qobject {
         fn protocol(self: &DeviceController) -> QString;
         fn banner(self: &DeviceController) -> QString;
         fn last_error(self: &DeviceController) -> QString;
+        fn last_sent(self: &DeviceController) -> QString;
         fn can_connect(self: &DeviceController) -> bool;
         fn can_disconnect(self: &DeviceController) -> bool;
         fn ready(self: &DeviceController) -> bool;
@@ -121,6 +123,10 @@ impl qobject::DeviceController {
 
     fn last_error(&self) -> QString {
         state::with(|s| qs(s.core.device.last_error()))
+    }
+
+    fn last_sent(&self) -> QString {
+        state::with(|s| qs(s.core.device.last_sent()))
     }
 
     fn can_connect(&self) -> bool {

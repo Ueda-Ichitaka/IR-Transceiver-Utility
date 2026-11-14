@@ -21,6 +21,8 @@ cxx-qt-lib = { version = "0.10.0", features = ["qt_full"] }
 cxx-qt-lib-extras = "0.10.0"
 # Not on crates.io; pinned to the reviewed commit of master (cxx-qt 0.10).
 cxx-kde-frameworks = { git = "https://invent.kde.org/libraries/cxx-kde-frameworks.git", rev = "5c51af42ad078feb89e4b7e590da9e3eab9e4d6d" }
+ir-codec.workspace = true
+ir-library.workspace = true
 ir-session.workspace = true
 ir-settings.workspace = true
 ir-view.workspace = true

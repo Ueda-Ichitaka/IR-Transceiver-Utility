@@ -447,6 +447,8 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "cxx-qt-lib-extras",
+ "ir-codec",
+ "ir-library",
  "ir-session",
  "ir-settings",
  "ir-view",
