@@ -1,0 +1,46 @@
+# PKGBUILD - AUR package of the IR Transceiver Utility, built from git.
+#
+# Builds through the top-level CMakeLists.txt (which drives Cargo) and
+# installs the binary, desktop file, metainfo and icon (design decision 6).
+# Dependencies are the Qt and KDE Frameworks libraries the binary links and
+# the QML modules it loads.
+pkgname=ir-transceiver-git
+_appname=IR-Transceiver-Utility
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Learn, capture and send infrared codes with ELK Smart USB IR dongles"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Ueda-Ichitaka/IR-Transceiver-Utility"
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'kirigami' 'ki18n' 'kcoreaddons' 'kcrash' 'qqc2-desktop-style')
+makedepends=('cargo' 'cmake' 'extra-cmake-modules' 'git')
+provides=('ir-transceiver')
+conflicts=('ir-transceiver')
+options=('!lto')
+source=("git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_appname"
+  local version
+  version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+  printf "%s.r%s.g%s" "$version" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+  cd "$_appname"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_NET_OFFLINE=true
+  cmake -S "$_appname" -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=None
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 "$_appname/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
