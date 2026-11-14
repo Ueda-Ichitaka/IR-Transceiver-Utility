@@ -29,7 +29,10 @@ Eric Janouch.
 ## Device access
 
 The app talks to the dongle directly over USB, so your user needs access to
-it. A udev rule such as `/etc/udev/rules.d/70-elksmart.rules`:
+it. Installing with CMake (or the package) adds
+`/usr/lib/udev/rules.d/70-ir-transceiver.rules` for all supported dongles;
+replug the dongle afterwards. When running from the source tree, add a rule
+yourself, for example `/etc/udev/rules.d/70-elksmart.rules`:
 
 ```
 SUBSYSTEM=="usb", ATTR{idVendor}=="045c", ATTR{idProduct}=="0132", TAG+="uaccess"

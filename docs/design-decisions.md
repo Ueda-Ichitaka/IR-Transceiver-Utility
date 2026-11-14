@@ -94,6 +94,16 @@ applied. Question 25 is still open.
 - **AUR:** `packaging/aur/PKGBUILD` is a `-git` package, since there is no
   tagged release yet.
 
+## Device access and capture import (2026-11-14)
+
+- **udev rule:** CMake installs `data/70-ir-transceiver.rules` (uaccess for
+  all supported product ids) to udev's rules directory.
+- **Capture import:** JSON (our export: signals and transfers), CSV (the tab
+  it was exported from, recognised by its header) and `.bin` (one learned
+  code) are loaded into the capture view.
+- **Import mode:** each import either replaces the current capture or
+  appends to it; the Import menu offers both.
+
 ## Open issues
 
 - The Debian check (`tools/debian-check/run.sh`) is written but has not run
