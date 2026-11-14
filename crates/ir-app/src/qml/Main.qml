@@ -22,6 +22,7 @@ Kirigami.ApplicationWindow {
     readonly property var pages: [
         { name: "Capture", page: capturePage },
         { name: "Send", page: sendPage },
+        { name: "Library", page: libraryPage },
         { name: "Device", page: devicePage }
     ]
 
@@ -47,6 +48,11 @@ Kirigami.ApplicationWindow {
         visible: false
     }
 
+    LibraryPage {
+        id: libraryPage
+        visible: false
+    }
+
     DevicePage {
         id: devicePage
         visible: false
@@ -69,7 +75,7 @@ Kirigami.ApplicationWindow {
             Kirigami.Action {
                 text: i18nc("@action:inmenu", "Library")
                 icon.name: "view-list-details"
-                enabled: false
+                onTriggered: root.showPage(libraryPage)
             },
             Kirigami.Action {
                 text: i18nc("@action:inmenu", "Device")

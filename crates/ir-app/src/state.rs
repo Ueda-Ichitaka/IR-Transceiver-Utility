@@ -3,7 +3,8 @@
 //! Exists because several QML objects (the device controller singleton and
 //! the capture list models) show the same data: it lives once, in a
 //! thread-local `AppState` on the GUI thread, holding the Qt-free `AppCore`,
-//! the settings file path and the session worker. `with` must not be nested
+//! the code library, the settings and library file paths and the session
+//! worker. `with` must not be nested
 //! and Qt signals are emitted only after it returns, so a QML handler can
 //! call back into Rust safely.
 
@@ -11,6 +12,8 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use ir_library::model::Library;
+use ir_library::store;
 use ir_session::session::Event;
 use ir_session::worker::SessionHandle;
 use ir_settings::Settings;
@@ -19,8 +22,10 @@ use ir_view::app::AppCore;
 /// State of the running app.
 pub struct AppState {
     pub core: AppCore,
+    pub library: Library,
     pub session: Option<SessionHandle>,
     settings_path: Option<PathBuf>,
+    library_path: Option<PathBuf>,
 }
 
 thread_local! {
@@ -55,11 +60,28 @@ impl AppState {
             Some(Err(e)) => (Settings::default(), Some(format!("Reading the settings failed: {e}"))),
             None => (Settings::default(), None),
         };
+        let library_path = store::default_path(|key| std::env::var(key).ok());
+        let (library, library_message) = match library_path.as_deref().map(|p| store::load(p, now)) {
+            Some(Ok(loaded)) => {
+                let message = loaded.recovered.map(|(backup, reason)| {
+                    format!("{reason}; the file was moved to {} and the library starts empty.", backup.display())
+                });
+                (loaded.library, message)
+            }
+            Some(Err(e)) => (Library::default(), Some(format!("Reading the library failed: {e}"))),
+            None => (Library::default(), None),
+        };
         let mut core = AppCore::new(settings);
-        if let Some(message) = message {
+        for message in [message, library_message].into_iter().flatten() {
             core.apply(&[Event::Error(message)]);
         }
-        Self { core, session: None, settings_path }
+        Self { core, library, session: None, settings_path, library_path }
+    }
+
+    /// Writes the library; a failure is returned as a message.
+    pub fn save_library(&mut self) -> Result<(), String> {
+        let Some(path) = &self.library_path else { return Err("No place to store the library (HOME is not set).".into()) };
+        store::save(path, &self.library).map_err(|e| format!("Saving the library failed: {e}"))
     }
 
     /// Writes the settings; a failure is shown as the last error.

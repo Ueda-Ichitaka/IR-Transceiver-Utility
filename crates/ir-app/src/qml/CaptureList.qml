@@ -1,18 +1,32 @@
 // CaptureList.qml - one capture tab: a scrolling list of rows.
 //
 // Shows time, kind, length and the data column of a CaptureModel; with
-// showSummary also the protocol description (Signals tab). Follows the end
-// of the list while the user has not scrolled up.
+// showSummary also the protocol description and the Save to library and
+// Send again buttons (Signals tab). Every row can copy its data column.
+// Follows the end of the list while the user has not scrolled up.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
+import io.github.ueda.irtransceiver
 
 Controls.ScrollView {
     id: scroll
 
     property alias model: list.model
     property bool showSummary: true
+
+    // QML has no clipboard API; a hidden text field copies through Qt.
+    function copy(text) {
+        clipboardHelper.text = text;
+        clipboardHelper.selectAll();
+        clipboardHelper.copy();
+    }
+
+    Controls.TextField {
+        id: clipboardHelper
+        visible: false
+    }
 
     ListView {
         id: list
@@ -34,6 +48,7 @@ Controls.ScrollView {
 
         delegate: Controls.ItemDelegate {
             id: row
+            required property int index
             required property string time
             required property string kind
             required property string summary
@@ -63,6 +78,37 @@ Controls.ScrollView {
                         font.bold: true
                         Layout.fillWidth: true
                         elide: Text.ElideRight
+                    }
+                    Item {
+                        visible: !scroll.showSummary
+                        Layout.fillWidth: true
+                    }
+                    Controls.ToolButton {
+                        visible: scroll.showSummary
+                        icon.name: "document-save"
+                        text: i18nc("@action:button", "Save to library")
+                        display: Controls.AbstractButton.IconOnly
+                        Controls.ToolTip.text: text
+                        Controls.ToolTip.visible: hovered
+                        onClicked: LibraryModel.saveSignal(row.index)
+                    }
+                    Controls.ToolButton {
+                        visible: scroll.showSummary
+                        icon.name: "document-send"
+                        text: i18nc("@action:button", "Send again")
+                        display: Controls.AbstractButton.IconOnly
+                        enabled: DeviceController.ready
+                        Controls.ToolTip.text: text
+                        Controls.ToolTip.visible: hovered
+                        onClicked: DeviceController.sendSignal(row.index)
+                    }
+                    Controls.ToolButton {
+                        icon.name: "edit-copy"
+                        text: i18nc("@action:button", "Copy")
+                        display: Controls.AbstractButton.IconOnly
+                        Controls.ToolTip.text: text
+                        Controls.ToolTip.visible: hovered
+                        onClicked: scroll.copy(row.bytes)
                     }
                 }
                 Controls.Label {

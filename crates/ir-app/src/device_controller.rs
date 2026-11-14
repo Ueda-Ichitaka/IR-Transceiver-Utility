@@ -76,6 +76,9 @@ pub mod qobject {
         fn clear_capture(self: Pin<&mut DeviceController>);
         #[qinvokable]
         fn clear_error(self: Pin<&mut DeviceController>);
+        /// Sends captured signal `row` again with the global defaults.
+        #[qinvokable]
+        fn send_signal(self: Pin<&mut DeviceController>, row: i32);
     }
 
     impl cxx_qt::Threading for DeviceController {}
@@ -87,7 +90,9 @@ use cxx_qt_lib::QString;
 use ir_session::session::{Command, Event, Session};
 use ir_session::usb::UsbConnector;
 use ir_session::worker;
+use ir_library::model::{Code, Payload};
 use ir_view::app::Update;
+use ir_view::send::command_for;
 use ir_view::capture::usage_text;
 
 use crate::state;
@@ -199,6 +204,27 @@ impl qobject::DeviceController {
     fn clear_error(self: Pin<&mut Self>) {
         state::with(|s| s.core.device.clear_error());
         self.status_changed();
+    }
+
+    fn send_signal(self: Pin<&mut Self>, row: i32) {
+        let command = state::with(|s| {
+            let signal = usize::try_from(row).ok().and_then(|r| s.core.capture.signal(r))?;
+            let code = Code {
+                id: 0,
+                name: String::new(),
+                tags: Vec::new(),
+                carrier_hz: None,
+                repeat: None,
+                payload: Payload::Learned { data: signal.data.clone() },
+                notes: String::new(),
+            };
+            Some(command_for(&code, &s.core.settings.send_defaults()))
+        });
+        match command {
+            Some(Ok(command)) => self.send(command),
+            Some(Err(message)) => self.apply_events(vec![Event::Error(message)]),
+            None => {}
+        }
     }
 
     /// Sends a command to the session worker; reports a missing worker.

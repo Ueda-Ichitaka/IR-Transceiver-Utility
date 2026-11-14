@@ -68,6 +68,8 @@ use ir_view::capture::Shown;
 use ir_view::display;
 use ir_view::send::{PayloadKind, SendForm};
 
+use ir_view::text::capitalise;
+
 use crate::state;
 
 /// Repeat choices, in the order of `repeat_options`.
@@ -184,10 +186,4 @@ impl qobject::SendController {
         self.as_mut().set_error(QString::from(&message));
         result.is_ok()
     }
-}
-
-/// Starts a message with a capital letter.
-fn capitalise(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
 }
