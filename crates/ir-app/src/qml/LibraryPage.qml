@@ -1,6 +1,7 @@
 // LibraryPage.qml - the saved codes.
 //
-// A searchable list of codes with a tag filter (design decision 23). Each
+// A searchable list of codes with a tag filter (design decision 23), each
+// with an icon for its payload kind and the date it was learned or added. Each
 // row can be sent, edited (name, tags, carrier, repeat, notes), copied as
 // Pronto hex or deleted. All changes go through the LibraryModel singleton,
 // which saves at once. Import adds codes from Flipper, LIRC or Pronto files;
@@ -113,8 +114,12 @@ Kirigami.ScrollablePage {
 
     footer: Controls.Label {
         padding: Kirigami.Units.smallSpacing
-        text: i18ncp("@info", "%1 code", "%1 codes", LibraryModel.total)
+        text: LibraryModel.filePath !== ""
+            ? i18ncp("@info", "%1 code · %2", "%1 codes · %2", LibraryModel.total, LibraryModel.filePath)
+            : i18ncp("@info", "%1 code", "%1 codes", LibraryModel.total)
         color: Kirigami.Theme.disabledTextColor
+        font: Kirigami.Theme.smallFont
+        elide: Text.ElideMiddle
     }
 
     ListView {
@@ -141,6 +146,9 @@ Kirigami.ScrollablePage {
             required property string summary
             required property string tags
             required property string notes
+            required property string iconName
+            required property string added
+            required property string addedVerb
 
             width: ListView.view.width
             Component.onCompleted: {
@@ -149,6 +157,11 @@ Kirigami.ScrollablePage {
                 }
             }
             contentItem: RowLayout {
+                Kirigami.Icon {
+                    source: row.iconName
+                    implicitWidth: Kirigami.Units.iconSizes.medium
+                    implicitHeight: Kirigami.Units.iconSizes.medium
+                }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
@@ -159,7 +172,9 @@ Kirigami.ScrollablePage {
                         elide: Text.ElideRight
                     }
                     Controls.Label {
-                        text: row.summary
+                        text: row.added !== ""
+                            ? row.summary + " · " + row.addedVerb + " " + Qt.formatDate(new Date(row.added), "yyyy-MM-dd")
+                            : row.summary
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         color: Kirigami.Theme.disabledTextColor

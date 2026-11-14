@@ -241,6 +241,7 @@ mod tests {
             repeat: None,
             payload: Payload::Pulses { pulses: vec![[560, 0]] },
             notes: String::new(),
+            added: None,
         }];
         let out = export_library(&codes, LibraryFormat::Flipper, 38_000).unwrap();
         assert!(String::from_utf8(out.bytes).unwrap().starts_with("Filetype: IR signals file"));

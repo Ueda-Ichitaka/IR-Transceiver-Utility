@@ -98,6 +98,11 @@ impl AppState {
         Ok(())
     }
 
+    /// Where the library is stored, for the library page's status line.
+    pub fn library_path(&self) -> Option<&std::path::Path> {
+        self.library_path.as_deref()
+    }
+
     /// Writes the library; a failure is returned as a message.
     pub fn save_library(&mut self) -> Result<(), String> {
         let Some(path) = &self.library_path else { return Err("No place to store the library (HOME is not set).".into()) };

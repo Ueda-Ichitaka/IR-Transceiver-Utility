@@ -56,6 +56,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use cxx_qt_lib::{QString, QUrl};
+use ir_transport::recorder::now_unix_ms;
 use ir_view::capture_import::import_capture;
 use ir_view::exchange::{self, add_all, code_item, signal_item};
 use ir_view::files::{self, CaptureFormat, LibraryFormat};
@@ -136,7 +137,7 @@ impl qobject::FileActions {
             let text = std::fs::read_to_string(&path).map_err(|e| format!("reading {} failed: {e}", path.display()))?;
             let codes = files::import(&text, &path)?;
             let count = state::with(|s| {
-                let count = add_all(&mut s.library, codes);
+                let count = add_all(&mut s.library, codes, now_unix_ms() / 1000);
                 s.save_library().map(|()| count)
             })?;
             Ok(files::import_message(count, &path))

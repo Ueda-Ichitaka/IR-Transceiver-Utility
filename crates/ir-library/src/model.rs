@@ -3,8 +3,8 @@
 //! Exists to define what a saved code is (design decisions 10, 12, 13, 22,
 //! 23): a named, tagged code with one of four payload kinds, an optional
 //! carrier frequency and repeat mode that override the global defaults, and
-//! notes. Byte payloads are stored as spaced uppercase hex so the file stays
-//! readable and editable by hand.
+//! notes, and when it was added. Byte payloads are stored as spaced uppercase
+//! hex and times as ISO 8601, so the file stays readable and editable by hand.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -37,6 +37,9 @@ pub struct Code {
     pub payload: Payload,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub notes: String,
+    /// When the code was added, as ISO 8601 UTC (`2026-11-14T20:15:03Z`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub added: Option<String>,
 }
 
 /// What is sent.
@@ -142,6 +145,7 @@ impl Library {
             repeat: None,
             payload,
             notes: String::new(),
+            added: None,
         });
         id
     }
@@ -177,6 +181,24 @@ impl Library {
             })
             .collect()
     }
+}
+
+/// ISO 8601 UTC time for Unix seconds, e.g. `2026-11-14T20:15:03Z`.
+pub fn iso_utc(unix_secs: u64) -> String {
+    let days = unix_secs / 86_400;
+    let secs = unix_secs % 86_400;
+    // Days since 1970-01-01 to a civil date (Howard Hinnant's algorithm,
+    // "chrono-Compatible Low-Level Date Algorithms").
+    let z = days + 719_468;
+    let era = z / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + u64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z", secs / 3600, secs / 60 % 60, secs % 60)
 }
 
 /// Serde helpers for bytes stored as hex text.
@@ -244,6 +266,23 @@ payload = { kind = "nec", address = 0, command = 89 }
         assert_eq!(lib.codes[0].repeat, Some(RepeatMode::FirstFrame { count: 2 }));
         assert_eq!(lib.codes[1].payload, Payload::Nec { address: 0, command: 0x59, extended: false });
         assert_eq!(lib.codes[1].carrier_hz, None);
+    }
+
+    #[test]
+    fn iso_times() {
+        assert_eq!(iso_utc(0), "1970-01-01T00:00:00Z");
+        assert_eq!(iso_utc(951_782_400), "2000-02-29T00:00:00Z");
+        assert_eq!(iso_utc(1_794_596_116), "2026-11-13T18:55:16Z");
+        assert_eq!(iso_utc(4_107_542_399), "2100-02-28T23:59:59Z");
+    }
+
+    #[test]
+    fn added_time_round_trips() {
+        let mut lib = Library::default();
+        let id = lib.add("x", Payload::Raw { data: vec![1] });
+        lib.get_mut(id).unwrap().added = Some(iso_utc(0));
+        assert!(lib.to_toml().contains("added = \"1970-01-01T00:00:00Z\""));
+        assert_eq!(Library::from_toml(&lib.to_toml()), Ok(lib));
     }
 
     #[test]

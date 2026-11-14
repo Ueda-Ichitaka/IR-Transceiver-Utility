@@ -404,6 +404,7 @@ impl qobject::DeviceController {
                 repeat: None,
                 payload: Payload::Learned { data: signal.data.clone() },
                 notes: String::new(),
+                added: None,
             };
             Some(command_for(&code, &s.core.settings.send_defaults()))
         });

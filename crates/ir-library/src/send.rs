@@ -70,7 +70,7 @@ mod tests {
     }
 
     fn code(payload: Payload) -> Code {
-        Code { id: 1, name: "x".into(), tags: vec![], carrier_hz: None, repeat: None, payload, notes: String::new() }
+        Code { id: 1, name: "x".into(), tags: vec![], carrier_hz: None, repeat: None, payload, notes: String::new(), added: None }
     }
 
     fn pulses(prepared: Result<Prepared, PrepareError>) -> (Vec<Pulse>, u32) {

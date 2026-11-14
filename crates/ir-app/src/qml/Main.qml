@@ -169,6 +169,9 @@ Kirigami.ApplicationWindow {
             root.showPage(libraryPage);
         },
         function () {
+            root.smokeScreenshot(root.pageStack, "library");
+        },
+        function () {
             root.showPage(sendPage);
             sendPage.smokeLoadFirstCode();
         },

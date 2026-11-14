@@ -3,8 +3,9 @@
 //! Exists so the cxx-qt bridges live in a library that both the
 //! `ir-transceiver` binary and the tests link. [`run`] sets up the KDE
 //! application (KI18n domain, KCrash, KAboutData, desktop file name, Breeze
-//! style), loads the Kirigami main window from the QML module and, when the
-//! window closes, stops the session worker.
+//! style), loads the Kirigami main window from the QML module (exiting with
+//! an error when it cannot be loaded) and, when the window closes, stops the
+//! session worker.
 //! `--smoke-test` makes the window quit right after loading (used by
 //! tests/smoke.rs).
 
@@ -50,6 +51,14 @@ pub fn run() {
 
     if let Some(mut engine) = engine.as_mut() {
         ki18n::setup_localized_context(engine.as_mut().upcast_pin());
+        // Without its main window the app would keep running invisibly.
+        engine
+            .as_mut()
+            .on_object_creation_failed(|_, url| {
+                eprintln!("ir-transceiver: loading {url} failed");
+                std::process::exit(1);
+            })
+            .release();
         engine.load(&QUrl::from(MAIN_QML));
     }
     if let Some(app) = app.as_mut() {

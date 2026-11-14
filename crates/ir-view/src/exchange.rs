@@ -13,7 +13,7 @@ use elk_proto::nec::{self, NecFrame};
 use elk_proto::protocols::Decoded;
 use elk_proto::pulse::{Pulse, decode_learned};
 use ir_formats::{flipper, lirc, pronto};
-use ir_library::model::{Code, Library, Payload};
+use ir_library::model::{Code, Library, Payload, iso_utc};
 
 use crate::capture::SignalRow;
 use crate::library::from_signal;
@@ -188,14 +188,16 @@ pub fn from_pronto(text: &str, name: &str) -> Result<Vec<NewCode>, String> {
     }])
 }
 
-/// Adds imported codes to the library; returns how many were added.
-pub fn add_all(library: &mut Library, codes: Vec<NewCode>) -> usize {
+/// Adds imported codes to the library, stamped with `now_secs` (Unix
+/// seconds); returns how many were added.
+pub fn add_all(library: &mut Library, codes: Vec<NewCode>, now_secs: u64) -> usize {
     let count = codes.len();
     for new in codes {
         let id = library.add(new.name, new.payload);
         let code = library.get_mut(id).expect("just added");
         code.carrier_hz = new.carrier_hz;
         code.tags = new.tags;
+        code.added = Some(iso_utc(now_secs));
     }
     count
 }
@@ -230,7 +232,7 @@ mod tests {
     }
 
     fn code(name: &str, payload: Payload) -> Code {
-        Code { id: 1, name: name.into(), tags: vec![], carrier_hz: None, repeat: None, payload, notes: String::new() }
+        Code { id: 1, name: name.into(), tags: vec![], carrier_hz: None, repeat: None, payload, notes: String::new(), added: None }
     }
 
     fn item(name: &str, carrier_hz: u32) -> Item {
@@ -362,10 +364,12 @@ mod tests {
         let added = add_all(
             &mut lib,
             vec![NewCode { name: "a".into(), payload: Payload::Raw { data: vec![1] }, carrier_hz: Some(36_000), tags: vec!["tv".into()] }],
+            0,
         );
         assert_eq!(added, 1);
         let c = lib.get(1).unwrap();
         assert_eq!((c.name.as_str(), c.carrier_hz, c.tags.clone()), ("a", Some(36_000), vec!["tv".to_string()]));
+        assert_eq!(c.added.as_deref(), Some("1970-01-01T00:00:00Z"));
     }
 
     #[test]

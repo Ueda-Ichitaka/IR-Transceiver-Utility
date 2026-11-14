@@ -36,6 +36,7 @@ pub mod qobject {
         #[qproperty(QString, tag, READ, WRITE = set_tag, NOTIFY = filter_changed)]
         #[qproperty(QStringList, tags, READ = tags, NOTIFY = library_changed)]
         #[qproperty(i32, total, READ = total, NOTIFY = library_changed)]
+        #[qproperty(QString, file_path, READ = file_path, CONSTANT)]
         #[qproperty(QString, error)]
         #[qproperty(QString, edit_name)]
         #[qproperty(QString, edit_tags)]
@@ -61,6 +62,7 @@ pub mod qobject {
         fn set_tag(self: Pin<&mut LibraryModel>, tag: QString);
         fn tags(self: &LibraryModel) -> QStringList;
         fn total(self: &LibraryModel) -> i32;
+        fn file_path(self: &LibraryModel) -> QString;
 
         #[qinvokable]
         #[cxx_override]
@@ -105,7 +107,9 @@ use std::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QHash, QHashPair_i32_QByteArray, QModelIndex, QString, QStringList, QVariant};
 use ir_library::model::RepeatMode;
-use ir_view::library::{EditForm, from_signal, summary};
+use ir_library::model::iso_utc;
+use ir_transport::recorder::now_unix_ms;
+use ir_view::library::{EditForm, added_verb, from_signal, payload_icon, summary};
 use ir_view::send::command_for;
 
 use ir_view::text::capitalise;
@@ -117,6 +121,9 @@ const ROLE_NAME: i32 = 0x101;
 const ROLE_SUMMARY: i32 = 0x102;
 const ROLE_TAGS: i32 = 0x103;
 const ROLE_NOTES: i32 = 0x104;
+const ROLE_ICON: i32 = 0x105;
+const ROLE_ADDED: i32 = 0x106;
+const ROLE_ADDED_VERB: i32 = 0x107;
 
 /// Repeat choices of the edit dialog: default, as learned, first frame.
 const REPEAT_DEFAULT: i32 = 0;
@@ -222,6 +229,10 @@ impl qobject::LibraryModel {
         tags.iter().collect()
     }
 
+    fn file_path(&self) -> QString {
+        state::with(|s| QString::from(&s.library_path().map(|p| p.display().to_string()).unwrap_or_default()))
+    }
+
     fn total(&self) -> i32 {
         state::with(|s| i32::try_from(s.library.codes.len()).unwrap_or(i32::MAX))
     }
@@ -238,6 +249,9 @@ impl qobject::LibraryModel {
             (ROLE_SUMMARY, "summary"),
             (ROLE_TAGS, "tags"),
             (ROLE_NOTES, "notes"),
+            (ROLE_ICON, "iconName"),
+            (ROLE_ADDED, "added"),
+            (ROLE_ADDED_VERB, "addedVerb"),
         ] {
             roles.insert(role, QByteArray::from(name));
         }
@@ -258,6 +272,9 @@ impl qobject::LibraryModel {
                 ROLE_SUMMARY => summary(code),
                 ROLE_TAGS => code.tags.join(", "),
                 ROLE_NOTES => code.notes.clone(),
+                ROLE_ICON => payload_icon(&code.payload).to_string(),
+                ROLE_ADDED => code.added.clone().unwrap_or_default(),
+                ROLE_ADDED_VERB => added_verb(&code.payload).to_string(),
                 _ => return None,
             })
         });
@@ -268,7 +285,11 @@ impl qobject::LibraryModel {
         let id = state::with(|s| {
             let signal = usize::try_from(row).ok().and_then(|r| s.core.capture.signal(r))?;
             let (name, payload) = from_signal(signal);
-            Some(s.library.add(name, payload))
+            let id = s.library.add(name, payload);
+            if let Some(code) = s.library.get_mut(id) {
+                code.added = Some(iso_utc(now_unix_ms() / 1000));
+            }
+            Some(id)
         });
         match id {
             Some(id) => {

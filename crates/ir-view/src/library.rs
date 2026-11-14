@@ -1,7 +1,8 @@
 //! Library page logic.
 //!
 //! Exists to show saved codes as one line each (what the payload is,
-//! carrier, size), to turn a captured signal into a new code, and to edit a
+//! carrier, size) with an icon per payload kind and "learned" or "added"
+//! before their date, to turn a captured signal into a new code, and to edit a
 //! code's name, tags (design decision 23), carrier and repeat overrides
 //! (decisions 12, 13) and notes through a form that validates its fields.
 
@@ -70,6 +71,22 @@ pub fn from_signal(row: &SignalRow) -> (String, Payload) {
     (name.to_string(), Payload::Learned { data: row.data.clone() })
 }
 
+/// Theme icon for a code's payload kind.
+pub fn payload_icon(payload: &Payload) -> &'static str {
+    match payload {
+        Payload::Learned { .. } => "media-record",
+        Payload::Pulses { .. } => "view-statistics",
+        Payload::Nec { .. } => "input-tablet",
+        Payload::Raw { .. } => "drive-removable-media-usb",
+    }
+}
+
+/// `learned` for learned codes, `added` for the others (shown before the
+/// date the code was added).
+pub fn added_verb(payload: &Payload) -> &'static str {
+    if matches!(payload, Payload::Learned { .. }) { "learned" } else { "added" }
+}
+
 /// The fields of the edit dialog as typed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditForm {
@@ -123,7 +140,7 @@ mod tests {
     }
 
     fn code(payload: Payload) -> Code {
-        Code { id: 1, name: "x".into(), tags: vec![], carrier_hz: None, repeat: None, payload, notes: String::new() }
+        Code { id: 1, name: "x".into(), tags: vec![], carrier_hz: None, repeat: None, payload, notes: String::new(), added: None }
     }
 
     #[test]
@@ -154,6 +171,19 @@ mod tests {
             "NEC-ext addr 0xEF00 cmd 0x03 · default carrier"
         );
         assert_eq!(summary(&code(Payload::Raw { data: vec![0xFC; 4] })), "Raw USB bytes · 4 B");
+    }
+
+    #[test]
+    fn icons_and_verbs_per_payload_kind() {
+        let learned = Payload::Learned { data: vec![] };
+        let pulses = Payload::Pulses { pulses: vec![] };
+        let nec = Payload::Nec { address: 0, command: 0, extended: false };
+        let raw = Payload::Raw { data: vec![] };
+        assert_eq!(
+            [&learned, &pulses, &nec, &raw].map(payload_icon),
+            ["media-record", "view-statistics", "input-tablet", "drive-removable-media-usb"]
+        );
+        assert_eq!([&learned, &pulses, &nec, &raw].map(added_verb), ["learned", "added", "added", "added"]);
     }
 
     #[test]

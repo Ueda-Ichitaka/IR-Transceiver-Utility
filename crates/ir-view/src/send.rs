@@ -235,6 +235,7 @@ impl SendForm {
             repeat: self.repeat,
             payload,
             notes: String::new(),
+            added: None,
         };
         command_for(&code, defaults)
     }
@@ -380,7 +381,7 @@ mod tests {
     }
 
     fn library_code(payload: Payload) -> Code {
-        Code { id: 7, name: "x".into(), tags: vec![], carrier_hz: Some(36_000), repeat: Some(RepeatMode::FirstFrame { count: 2 }), payload, notes: String::new() }
+        Code { id: 7, name: "x".into(), tags: vec![], carrier_hz: Some(36_000), repeat: Some(RepeatMode::FirstFrame { count: 2 }), payload, notes: String::new(), added: None }
     }
 
     #[test]

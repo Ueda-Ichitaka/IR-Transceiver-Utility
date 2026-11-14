@@ -90,7 +90,8 @@ use std::pin::Pin;
 
 use cxx_qt_lib::{QList, QString, QStringList};
 use ir_codec::{Encoding, FormatOptions};
-use ir_library::model::RepeatMode;
+use ir_library::model::{RepeatMode, iso_utc};
+use ir_transport::recorder::now_unix_ms;
 use ir_view::capture::Shown;
 use ir_view::display;
 use ir_view::send::{PayloadKind, SendForm, reencode, wire};
@@ -265,6 +266,7 @@ impl qobject::SendController {
                 if let Some(code) = s.library.get_mut(id) {
                     code.carrier_hz = carrier_hz;
                     code.repeat = repeat;
+                    code.added = Some(iso_utc(now_unix_ms() / 1000));
                 }
                 s.save_library().map(|()| id)
             })
