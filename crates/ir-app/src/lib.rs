@@ -1,10 +1,11 @@
 //! ir-app - the IR Transceiver Utility GUI as a library.
 //!
 //! Exists so the cxx-qt bridges live in a library that both the
-//! `ir-transceiver` binary and the tests link. [`run`] sets up the KDE application (KI18n domain, KCrash, KAboutData,
-//! desktop file name, Breeze style) and load the Kirigami main window from
-//! the QML module. `--smoke-test` makes the window quit right after loading
-//! (used by tests/smoke.rs).
+//! `ir-transceiver` binary and the tests link. [`run`] sets up the KDE
+//! application (KI18n domain, KCrash, KAboutData, desktop file name, Breeze
+//! style) and loads the Kirigami main window from the QML module.
+//! `--smoke-test` makes the window quit right after loading (used by
+//! tests/smoke.rs).
 
 pub mod app_info;
 
