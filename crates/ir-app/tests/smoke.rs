@@ -12,7 +12,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const MARKER: &str = "ir-transceiver: main window ready";
-const PAGES: [&str; 4] = ["Capture", "Send", "Library", "Device"];
+const PAGES: [&str; 5] = ["Capture", "Send", "Library", "Device", "Settings"];
 /// Text Qt prints for QML problems.
 const QML_PROBLEMS: [&str; 7] =
     ["qrc:/", "qt.qml.", "TypeError", "ReferenceError", "is not a type", "Cannot assign", "is not defined"];

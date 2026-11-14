@@ -23,6 +23,13 @@ Kirigami.ScrollablePage {
         id: form
     }
 
+    Connections {
+        target: SettingsController
+        function onSaved() {
+            form.refreshDefaults();
+        }
+    }
+
     actions: [
         Kirigami.Action {
             text: i18nc("@action:button", "Send")

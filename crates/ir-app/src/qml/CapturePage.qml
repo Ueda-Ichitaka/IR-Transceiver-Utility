@@ -94,6 +94,15 @@ Kirigami.Page {
         onAccepted: FileActions.exportCapture(selectedFile, format)
     }
 
+    Connections {
+        target: SettingsController
+        function onSaved() {
+            signalModel.reformat();
+            transferModel.reformat();
+            DeviceController.refreshCapture();
+        }
+    }
+
     CaptureModel {
         id: signalModel
         tab: 0

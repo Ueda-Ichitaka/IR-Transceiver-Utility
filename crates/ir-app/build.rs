@@ -12,8 +12,9 @@ fn main() {
             "src/qml/DevicePage.qml",
             "src/qml/SendPage.qml",
             "src/qml/LibraryPage.qml",
+            "src/qml/SettingsPage.qml",
         ]),
     )
-    .files(["src/app_info.rs", "src/capture_model.rs", "src/device_controller.rs", "src/send_controller.rs", "src/library_model.rs", "src/file_actions.rs"])
+    .files(["src/app_info.rs", "src/capture_model.rs", "src/device_controller.rs", "src/send_controller.rs", "src/library_model.rs", "src/file_actions.rs", "src/settings_controller.rs"])
     .build();
 }

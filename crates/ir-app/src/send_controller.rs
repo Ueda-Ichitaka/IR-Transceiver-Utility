@@ -33,7 +33,7 @@ pub mod qobject {
         #[qproperty(QStringList, kind_options, READ = kind_options, CONSTANT)]
         #[qproperty(QStringList, encoding_options, READ = encoding_options, CONSTANT)]
         #[qproperty(QStringList, repeat_options, READ = repeat_options, CONSTANT)]
-        #[qproperty(QString, default_carrier, READ = default_carrier, CONSTANT)]
+        #[qproperty(QString, default_carrier, READ = default_carrier, NOTIFY = defaults_changed)]
         type SendController = super::SendControllerRust;
     }
 
@@ -51,6 +51,12 @@ pub mod qobject {
     extern "RustQt" {
         #[qsignal]
         fn encoding_changed(self: Pin<&mut SendController>);
+        #[qsignal]
+        fn defaults_changed(self: Pin<&mut SendController>);
+
+        /// Re-reads the defaults shown as placeholders (after the settings changed).
+        #[qinvokable]
+        fn refresh_defaults(self: Pin<&mut SendController>);
 
         /// Sends the code described by the form; returns false and sets
         /// `error` when the form is invalid or no dongle is connected.
@@ -127,6 +133,10 @@ impl qobject::SendController {
 
     fn default_carrier(&self) -> QString {
         state::with(|s| QString::from(&s.core.settings.send.carrier_hz.to_string()))
+    }
+
+    fn refresh_defaults(self: Pin<&mut Self>) {
+        self.defaults_changed();
     }
 
     fn encoding_index(&self) -> i32 {

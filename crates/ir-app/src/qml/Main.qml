@@ -23,7 +23,8 @@ Kirigami.ApplicationWindow {
         { name: "Capture", page: capturePage },
         { name: "Send", page: sendPage },
         { name: "Library", page: libraryPage },
-        { name: "Device", page: devicePage }
+        { name: "Device", page: devicePage },
+        { name: "Settings", page: settingsPage }
     ]
 
     // Pages are created once and kept, so a running capture keeps its lists
@@ -58,6 +59,11 @@ Kirigami.ApplicationWindow {
         visible: false
     }
 
+    SettingsPage {
+        id: settingsPage
+        visible: false
+    }
+
     globalDrawer: Kirigami.GlobalDrawer {
         isMenu: false
         modal: false
@@ -81,6 +87,11 @@ Kirigami.ApplicationWindow {
                 text: i18nc("@action:inmenu", "Device")
                 icon.name: "drive-removable-media-usb"
                 onTriggered: root.showPage(devicePage)
+            },
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "Settings")
+                icon.name: "settings-configure"
+                onTriggered: root.showPage(settingsPage)
             }
         ]
         footer: ColumnLayout {

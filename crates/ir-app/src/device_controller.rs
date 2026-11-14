@@ -76,6 +76,9 @@ pub mod qobject {
         fn clear_capture(self: Pin<&mut DeviceController>);
         #[qinvokable]
         fn clear_error(self: Pin<&mut DeviceController>);
+        /// Re-reads the capture counters and usage (after the limit changed).
+        #[qinvokable]
+        fn refresh_capture(self: Pin<&mut DeviceController>);
         /// Sends captured signal `row` again with the global defaults.
         #[qinvokable]
         fn send_signal(self: Pin<&mut DeviceController>, row: i32);
@@ -198,6 +201,10 @@ impl qobject::DeviceController {
 
     fn clear_capture(self: Pin<&mut Self>) {
         state::with(|s| s.core.capture.clear());
+        self.capture_changed();
+    }
+
+    fn refresh_capture(self: Pin<&mut Self>) {
         self.capture_changed();
     }
 
