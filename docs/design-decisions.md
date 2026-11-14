@@ -85,8 +85,18 @@ applied. Question 25 is still open.
 - Order: device and capture, then send, then library; CMake/ECM and the
   PKGBUILD at the end.
 
+## Build and packaging (2026-11-14)
+
+- **CMake and Cargo:** `CMakeLists.txt` runs `cargo build --release --locked`
+  through a custom target and installs with ECM's KDEInstallDirs (no
+  Corrosion).
+- **Icon:** an own SVG, `data/io.github.ueda.irtransceiver.svg`.
+- **AUR:** `packaging/aur/PKGBUILD` is a `-git` package, since there is no
+  tagged release yet.
+
 ## Open issues
 
-- The Debian container check needs Podman or Docker, neither of which is
-  installed on the development machine.
+- The Debian check (`tools/debian-check/run.sh`) is written but has not run
+  yet: Docker on the development machine cannot start until it is rebooted
+  into the installed kernel.
 - Question 25 (tray, shortcuts, D-Bus, CLI) is deferred.
