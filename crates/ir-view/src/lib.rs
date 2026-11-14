@@ -8,7 +8,8 @@
 //! `capture_export` writes them as JSON, CSV or raw bytes, `display`
 //! maps a view's settings to its encoding switch, `send` turns the Send form
 //! into a session command, `library` describes and edits saved codes, `text`
-//! formats messages, `exchange` converts to and from LIRC, Flipper and Pronto.
+//! formats messages, `exchange` converts to and from LIRC, Flipper and Pronto,
+//! `files` picks export contents and recognises imported files.
 
 pub mod app;
 pub mod capture;
@@ -16,6 +17,7 @@ pub mod capture_export;
 pub mod device;
 pub mod display;
 pub mod exchange;
+pub mod files;
 pub mod library;
 pub mod send;
 pub mod text;
