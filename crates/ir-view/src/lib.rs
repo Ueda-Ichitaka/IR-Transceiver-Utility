@@ -7,12 +7,13 @@
 //! for the two capture tabs within the configured memory limit, `display`
 //! maps a view's settings to its encoding switch, `send` turns the Send form
 //! into a session command, `library` describes and edits saved codes, `text`
-//! formats messages.
+//! formats messages, `exchange` converts to and from LIRC, Flipper and Pronto.
 
 pub mod app;
 pub mod capture;
 pub mod device;
 pub mod display;
+pub mod exchange;
 pub mod library;
 pub mod send;
 pub mod text;

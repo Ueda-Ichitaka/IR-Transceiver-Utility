@@ -511,6 +511,7 @@ version = "0.1.0"
 dependencies = [
  "elk-proto",
  "ir-codec",
+ "ir-formats",
  "ir-library",
  "ir-session",
  "ir-settings",

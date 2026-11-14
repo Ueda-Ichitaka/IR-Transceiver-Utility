@@ -65,6 +65,26 @@ applied. Question 25 is still open.
 - **Debian stable check:** build in a `debian:trixie` container (Podman or
   Docker) under the same memory cap.
 
+## Export formats (2026-11-14)
+
+- **Capture JSON:** one file with both tabs: `signals` (time, complete,
+  summary, data as hex, pulses) and `transfers` (time, direction, data as
+  hex).
+- **Capture CSV:** the open tab only, with a header line and RFC 4180
+  quoting.
+- **Raw .bin:** all bytes received from the dongle (IN transfers) in order.
+- **LIRC, Pronto, Flipper:** import into and export from the library, and
+  export directly from the Signals tab.
+
+## GUI (2026-11-14)
+
+- The capture page has two tabs, received signals and USB transfers, each
+  with its own encoding switch.
+- GUI logic lives in the Qt-free crate `ir-view` and is unit tested; the
+  cxx-qt objects only forward. An offscreen smoke test opens every page.
+- Order: device and capture, then send, then library; CMake/ECM and the
+  PKGBUILD at the end.
+
 ## Open issues
 
 - The Debian container check needs Podman or Docker, neither of which is
