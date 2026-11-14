@@ -3,8 +3,8 @@
 // Kirigami application window with the sidebar (design decision 24) leading
 // to the pages, and the connection status always shown in the sidebar
 // footer. On start it connects to the first dongle found (design decision 9).
-// With --smoke-test it does not connect: it opens every page, logs a marker
-// per page and one when done, and quits.
+// With --smoke-test it does not connect: it opens every page, replays the
+// recorded fixture into the capture page, logs markers and quits.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
@@ -118,6 +118,8 @@ Kirigami.ApplicationWindow {
     Timer {
         id: smokeSteps
         property int next: 0
+        property bool replayed: false
+        property bool savedToLibrary: false
         interval: 50
         repeat: true
         onTriggered: {
@@ -125,6 +127,22 @@ Kirigami.ApplicationWindow {
                 console.info("ir-transceiver: page " + root.pages[next - 1].name + " ready");
             }
             if (next === root.pages.length) {
+                // Last step: replay the fixture into the capture page and let
+                // both tabs render their rows.
+                if (!replayed) {
+                    replayed = true;
+                    root.showPage(capturePage);
+                    DeviceController.replayFixture();
+                    capturePage.showTab(1);
+                    return;
+                }
+                // Then save the first signal and let the library render it.
+                if (!savedToLibrary) {
+                    savedToLibrary = true;
+                    LibraryModel.saveSignal(0);
+                    root.showPage(libraryPage);
+                    return;
+                }
                 stop();
                 console.info("ir-transceiver: main window ready");
                 Qt.exit(0);

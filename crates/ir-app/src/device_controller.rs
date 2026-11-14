@@ -76,6 +76,10 @@ pub mod qobject {
         fn clear_capture(self: Pin<&mut DeviceController>);
         #[qinvokable]
         fn clear_error(self: Pin<&mut DeviceController>);
+        /// Feeds the recorded TV remote fixture through the capture, as if
+        /// the dongle had sent it (used by the smoke test).
+        #[qinvokable]
+        fn replay_fixture(self: Pin<&mut DeviceController>);
         /// Re-reads the capture counters and usage (after the limit changed).
         #[qinvokable]
         fn refresh_capture(self: Pin<&mut DeviceController>);
@@ -97,6 +101,7 @@ use ir_library::model::{Code, Payload};
 use ir_view::app::Update;
 use ir_view::send::command_for;
 use ir_view::capture::usage_text;
+use ir_view::replay::{TV_POWER_LOG, events_from_probe_log};
 
 use crate::state;
 
@@ -202,6 +207,10 @@ impl qobject::DeviceController {
     fn clear_capture(self: Pin<&mut Self>) {
         state::with(|s| s.core.capture.clear());
         self.capture_changed();
+    }
+
+    fn replay_fixture(self: Pin<&mut Self>) {
+        self.apply_events(events_from_probe_log(TV_POWER_LOG));
     }
 
     fn refresh_capture(self: Pin<&mut Self>) {

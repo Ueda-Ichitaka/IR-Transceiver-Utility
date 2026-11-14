@@ -10,7 +10,7 @@
 //! into a session command, `library` describes and edits saved codes, `text`
 //! formats messages, `exchange` converts to and from LIRC, Flipper and Pronto,
 //! `files` picks export contents and recognises imported files, `settings_form`
-//! edits the settings.
+//! edits the settings, `replay` turns an elk-probe log into session events.
 
 pub mod app;
 pub mod capture;
@@ -20,6 +20,7 @@ pub mod display;
 pub mod exchange;
 pub mod files;
 pub mod library;
+pub mod replay;
 pub mod send;
 pub mod settings_form;
 pub mod text;

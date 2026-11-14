@@ -143,6 +143,11 @@ Kirigami.ScrollablePage {
             required property string notes
 
             width: ListView.view.width
+            Component.onCompleted: {
+                if (Qt.application.arguments.indexOf("--smoke-test") >= 0) {
+                    console.info("ir-transceiver: code " + name + " | " + summary);
+                }
+            }
             contentItem: RowLayout {
                 ColumnLayout {
                     Layout.fillWidth: true

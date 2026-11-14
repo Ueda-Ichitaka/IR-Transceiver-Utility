@@ -3,7 +3,8 @@
 //! Exists to catch broken QML, missing QML modules (Kirigami) and bridge
 //! registration errors that unit tests cannot see. The app is started on
 //! Qt's offscreen platform with `--smoke-test`; the main window then opens
-//! every page, logs a marker per page and one when done, and quits. A QML
+//! every page, replays the recorded TV remote fixture into the capture page,
+//! logs a marker per page and per rendered capture row, and quits. A QML
 //! warning or error, a missing marker or a hang fails the test. In smoke-test
 //! mode the app does not connect to a dongle.
 
@@ -58,6 +59,14 @@ fn main_window_loads_offscreen() {
     for page in PAGES {
         let marker = format!("ir-transceiver: page {page} ready");
         assert!(stderr.contains(&marker), "{marker:?} missing, stderr:\n{stderr}");
+    }
+    // Rendered capture rows log their visible text.
+    for row in [
+        "ir-transceiver: row complete | NEC addr 0x00 cmd 0x59, NEC repeat x5 | FF FF 37 FF",
+        "ir-transceiver: row OUT |  | FC FC FC FC",
+        "ir-transceiver: code NEC addr 0x00 cmd 0x59 | NEC addr 0x00 cmd 0x59, NEC repeat x5 · default carrier · 216 B",
+    ] {
+        assert!(stderr.contains(row), "{row:?} missing, stderr:\n{stderr}");
     }
     for problem in QML_PROBLEMS {
         assert!(!stderr.contains(problem), "QML problem {problem:?}, stderr:\n{stderr}");

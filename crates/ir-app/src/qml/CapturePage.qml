@@ -19,6 +19,11 @@ Kirigami.Page {
 
     readonly property int learnWaitSeconds: 30
 
+    // Shows the Signals (0) or Transfers (1) tab.
+    function showTab(index) {
+        tabs.currentIndex = index;
+    }
+
     actions: [
         Kirigami.Action {
             text: i18nc("@action:button", "Learn once")

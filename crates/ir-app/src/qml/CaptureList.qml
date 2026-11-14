@@ -24,10 +24,6 @@ Controls.ScrollView {
         clipboardHelper.copy();
     }
 
-    Controls.TextField {
-        id: clipboardHelper
-        visible: false
-    }
 
     ListView {
         id: list
@@ -38,6 +34,13 @@ Controls.ScrollView {
         property bool follow: true
         onMovementEnded: follow = atEnd
         onCountChanged: if (follow) Qt.callLater(positionViewAtEnd)
+
+        // Inside the ListView: the ScrollView must have the list as its only
+        // child, or it does not size it.
+        Controls.TextField {
+            id: clipboardHelper
+            visible: false
+        }
 
         Kirigami.PlaceholderMessage {
             anchors.centerIn: parent
@@ -57,6 +60,11 @@ Controls.ScrollView {
             required property string length
 
             width: ListView.view.width
+            Component.onCompleted: {
+                if (Qt.application.arguments.indexOf("--smoke-test") >= 0) {
+                    console.info("ir-transceiver: row " + kind + " | " + summary + " | " + bytes.substring(0, 11));
+                }
+            }
             contentItem: ColumnLayout {
                 spacing: 0
                 RowLayout {
