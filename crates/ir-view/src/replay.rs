@@ -16,8 +16,9 @@ use ir_transport::recorder::{self, Entry};
 pub const TV_POWER_LOG: &str = include_str!("../../../fixtures/1794596116-learn-tv-power.log");
 
 /// Transfer events of the log in order, followed by one learned event per
-/// `# data:` line. Lines that do not parse are skipped.
-pub fn events_from_probe_log(text: &str) -> Vec<Event> {
+/// `# data:` line, with wall-clock times counted from `base_wall_ms`. Lines
+/// that do not parse are skipped.
+pub fn events_from_probe_log(text: &str, base_wall_ms: u64) -> Vec<Event> {
     let mut transfers = Vec::new();
     let mut learned = Vec::new();
     for line in text.lines() {
@@ -25,7 +26,7 @@ pub fn events_from_probe_log(text: &str) -> Vec<Event> {
             if let Some(data) = hex_bytes(data) {
                 learned.push(Event::Learned(LearnOutcome::Complete(LearnedCode { announced_len: data.len(), data })));
             }
-        } else if let Some(entry) = transfer(line) {
+        } else if let Some(entry) = transfer(line, base_wall_ms) {
             transfers.push(Event::Transfer(entry));
         }
     }
@@ -34,7 +35,7 @@ pub fn events_from_probe_log(text: &str) -> Vec<Event> {
 }
 
 /// `   0.010  OUT  FC FC FC FC` -> an entry.
-fn transfer(line: &str) -> Option<Entry> {
+fn transfer(line: &str, base_wall_ms: u64) -> Option<Entry> {
     let mut words = line.split_whitespace();
     let (secs, millis) = words.next()?.split_once('.')?;
     let at = Duration::from_secs(secs.parse().ok()?) + Duration::from_millis(millis.parse().ok()?);
@@ -45,7 +46,7 @@ fn transfer(line: &str) -> Option<Entry> {
         "IN" => recorder::Event::In(bytes),
         _ => return None,
     };
-    Some(Entry { at, event })
+    Some(Entry { at, wall_ms: base_wall_ms + at.as_millis() as u64, event })
 }
 
 /// Space-separated two-digit hex bytes; `None` if any word is not one.
@@ -62,12 +63,12 @@ mod tests {
 
     #[test]
     fn fixture_replays_transfers_and_three_codes() {
-        let events = events_from_probe_log(TV_POWER_LOG);
+        let events = events_from_probe_log(TV_POWER_LOG, 1_000_000);
         let transfers: Vec<&Entry> =
             events.iter().filter_map(|e| if let Event::Transfer(t) = e { Some(t) } else { None }).collect();
         let lines = TV_POWER_LOG.lines().filter(|l| l.contains("  OUT  ") || l.contains("  IN   ")).count();
         assert_eq!(transfers.len(), lines);
-        assert_eq!(transfers[0], &Entry { at: Duration::from_millis(10), event: recorder::Event::Out(vec![0xFC; 4]) });
+        assert_eq!(transfers[0], &Entry { wall_ms: 1_000_010, at: Duration::from_millis(10), event: recorder::Event::Out(vec![0xFC; 4]) });
         assert_eq!(transfers[1].event, recorder::Event::In(vec![0xFC, 0xFC, 0xFC, 0xFC, 0x70, 0x01]));
         assert_eq!(transfers[3].at, Duration::from_millis(19_708));
         let learned: Vec<&LearnedCode> = events
@@ -83,6 +84,6 @@ mod tests {
 
     #[test]
     fn junk_is_skipped() {
-        assert!(events_from_probe_log("hello\n  x  IN   ZZ\n# data: 1\n").is_empty());
+        assert!(events_from_probe_log("hello\n  x  IN   ZZ\n# data: 1\n", 0).is_empty());
     }
 }

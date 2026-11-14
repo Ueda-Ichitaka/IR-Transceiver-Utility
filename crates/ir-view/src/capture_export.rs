@@ -124,7 +124,7 @@ mod tests {
     use std::time::Duration;
 
     fn transfer(ms: u64, event: recorder::Event) -> Event {
-        Event::Transfer(Entry { at: Duration::from_millis(ms), event })
+        Event::Transfer(Entry { wall_ms: 0, at: Duration::from_millis(ms), event })
     }
 
     fn sample() -> CaptureLog {

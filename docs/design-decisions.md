@@ -104,6 +104,17 @@ applied. Question 25 is still open.
 - **Import mode:** each import either replaces the current capture or
   appends to it; the Import menu offers both.
 
+## Matching the mockup (2026-11-14)
+
+- **Pages follow the mockup** in `docs/implementation-plan.html`, built in
+  the order Capture, Send, Device, Library. Where a later decision differs,
+  the decision wins: two capture tabs, repeat modes "as learned / first
+  frame", TOML library, no USB reset.
+- **Capture time column:** time of day or seconds since connecting,
+  switchable in the settings.
+- **Added from the mockup:** Pause view (capture), Identify and an
+  environment check (device page), hotplug detection with reconnect.
+
 ## Open issues
 
 - The Debian check (`tools/debian-check/run.sh`) is written but has not run

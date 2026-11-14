@@ -159,7 +159,7 @@ mod tests {
 
     fn log() -> CaptureLog {
         let mut log = CaptureLog::new(1 << 20);
-        log.apply(&Event::Transfer(Entry { at: Duration::ZERO, event: recorder::Event::In(vec![0xAB, 0xCD]) }));
+        log.apply(&Event::Transfer(Entry { wall_ms: 0, at: Duration::ZERO, event: recorder::Event::In(vec![0xAB, 0xCD]) }));
         log.apply(&Event::Learned(LearnOutcome::Complete(LearnedCode { announced_len: 2, data: vec![0x23, 0x37] })));
         log.apply(&Event::Learned(LearnOutcome::Short(LearnedCode { announced_len: 9, data: vec![0x23, 0xFF] })));
         log

@@ -70,7 +70,7 @@ mod tests {
     use std::time::Duration;
 
     fn chunk() -> Event {
-        Event::Transfer(Entry { at: Duration::ZERO, event: recorder::Event::In(vec![0; 64]) })
+        Event::Transfer(Entry { wall_ms: 0, at: Duration::ZERO, event: recorder::Event::In(vec![0; 64]) })
     }
 
     #[test]

@@ -101,6 +101,7 @@ use ir_library::model::{Code, Payload};
 use ir_view::app::Update;
 use ir_view::send::command_for;
 use ir_view::capture::usage_text;
+use ir_transport::recorder::now_unix_ms;
 use ir_view::replay::{TV_POWER_LOG, events_from_probe_log};
 
 use crate::state;
@@ -210,7 +211,7 @@ impl qobject::DeviceController {
     }
 
     fn replay_fixture(self: Pin<&mut Self>) {
-        self.apply_events(events_from_probe_log(TV_POWER_LOG));
+        self.apply_events(events_from_probe_log(TV_POWER_LOG, now_unix_ms()));
     }
 
     fn refresh_capture(self: Pin<&mut Self>) {

@@ -1,11 +1,12 @@
 //! `Recorder`: a `Transport` wrapper that logs every transfer.
 //!
 //! Exists to capture raw dongle traffic as fixtures and as the app's USB log.
-//! Every successful write and read is logged with its offset from the start;
+//! Every successful write and read is logged with its offset from the start
+//! and its wall-clock time;
 //! read timeouts are counted instead of logged, other errors are logged.
 
 use std::fmt::Write as _;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::transport::{Transport, TransportError};
 
@@ -17,24 +18,34 @@ pub enum Event {
     Error(TransportError),
 }
 
-/// One logged event with its time offset from the recorder's start.
+/// One logged event with its time offset from the recorder's start and its
+/// wall-clock time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     pub at: Duration,
+    /// Milliseconds since the Unix epoch.
+    pub wall_ms: u64,
     pub event: Event,
+}
+
+/// The current time in milliseconds since the Unix epoch (0 if the clock is
+/// before 1970).
+pub fn now_unix_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
 
 /// Wraps a transport and logs its traffic.
 pub struct Recorder<T> {
     inner: T,
     start: Instant,
+    start_wall_ms: u64,
     entries: Vec<Entry>,
     read_timeouts: u64,
 }
 
 impl<T: Transport> Recorder<T> {
     pub fn new(inner: T) -> Self {
-        Self { inner, start: Instant::now(), entries: Vec::new(), read_timeouts: 0 }
+        Self { inner, start: Instant::now(), start_wall_ms: now_unix_ms(), entries: Vec::new(), read_timeouts: 0 }
     }
 
     pub fn entries(&self) -> &[Entry] {
@@ -56,7 +67,8 @@ impl<T: Transport> Recorder<T> {
     }
 
     fn log(&mut self, event: Event) {
-        self.entries.push(Entry { at: self.start.elapsed(), event });
+        let at = self.start.elapsed();
+        self.entries.push(Entry { at, wall_ms: self.start_wall_ms + at.as_millis() as u64, event });
     }
 }
 
@@ -158,11 +170,25 @@ mod tests {
 
     #[test]
     fn format_entry_lines() {
-        let out = Entry { at: Duration::from_millis(1234), event: Event::Out(vec![0xFC, 0xFC]) };
-        let inn = Entry { at: Duration::from_millis(5), event: Event::In(vec![0x01]) };
-        let err = Entry { at: Duration::from_secs(12), event: Event::Error(TransportError::Disconnected) };
+        let out = Entry { wall_ms: 0, at: Duration::from_millis(1234), event: Event::Out(vec![0xFC, 0xFC]) };
+        let inn = Entry { wall_ms: 0, at: Duration::from_millis(5), event: Event::In(vec![0x01]) };
+        let err = Entry { wall_ms: 0, at: Duration::from_secs(12), event: Event::Error(TransportError::Disconnected) };
         assert_eq!(format_entry(&out), "   1.234  OUT  FC FC");
         assert_eq!(format_entry(&inn), "   0.005  IN   01");
         assert_eq!(format_entry(&err), "  12.000  ERR  device disconnected");
+    }
+
+    #[test]
+    fn entries_carry_wall_clock_time() {
+        let before = now_unix_ms();
+        let mut r = Recorder::new(MockTransport::new([Step::ExpectWrite(vec![1]), Step::Reply(vec![2])]));
+        r.write(&[1], T).unwrap();
+        r.read(T).unwrap();
+        let after = now_unix_ms();
+        for e in r.entries() {
+            assert!((before..=after).contains(&e.wall_ms), "{} not in {before}..={after}", e.wall_ms);
+        }
+        let offset = |e: &Entry| e.wall_ms - e.at.as_millis() as u64;
+        assert!(offset(&r.entries()[1]).abs_diff(offset(&r.entries()[0])) <= 1, "same clock base");
     }
 }

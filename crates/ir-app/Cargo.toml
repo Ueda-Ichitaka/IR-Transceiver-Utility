@@ -24,6 +24,7 @@ cxx-kde-frameworks = { git = "https://invent.kde.org/libraries/cxx-kde-framework
 ir-codec.workspace = true
 ir-library.workspace = true
 ir-session.workspace = true
+ir-transport.workspace = true
 ir-settings.workspace = true
 ir-view.workspace = true
 
