@@ -516,6 +516,8 @@ dependencies = [
  "ir-session",
  "ir-settings",
  "ir-transport",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
