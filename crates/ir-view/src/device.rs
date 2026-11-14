@@ -1,8 +1,9 @@
 //! Connection status shown in the sidebar and on the device page.
 //!
 //! Exists to derive, from session events alone, what the user sees (state,
-//! device line, dongle protocol, last error, the "waiting for an IR signal"
-//! banner of design decision 14) and which actions are enabled.
+//! device line, dongle protocol, last error, the last transmit, the "waiting
+//! for an IR signal" banner of design decision 14) and which actions are
+//! enabled.
 
 use elk_proto::identify::Protocol;
 use ir_session::session::{Event, State};
@@ -18,11 +19,12 @@ pub struct DeviceView {
     device: Option<String>,
     protocol: Option<Protocol>,
     last_error: Option<String>,
+    last_sent: Option<String>,
 }
 
 impl Default for DeviceView {
     fn default() -> Self {
-        Self { state: State::Disconnected, device: None, protocol: None, last_error: None }
+        Self { state: State::Disconnected, device: None, protocol: None, last_error: None, last_sent: None }
     }
 }
 
@@ -36,6 +38,7 @@ impl DeviceView {
                 if *state == State::Disconnected {
                     self.device = None;
                     self.protocol = None;
+                    self.last_sent = None;
                 }
             }
             Event::Connected { device, protocol } => {
@@ -43,6 +46,8 @@ impl DeviceView {
                 self.protocol = Some(*protocol);
             }
             Event::Error(message) => self.last_error = Some(message.clone()),
+            Event::Transmitted { pulses } => self.last_sent = Some(format!("Sent {pulses} pulses.")),
+            Event::RawSent { bytes } => self.last_sent = Some(format!("Sent {bytes} raw bytes.")),
             _ => {}
         }
         *self != before
@@ -75,6 +80,11 @@ impl DeviceView {
 
     pub fn banner(&self) -> Option<&'static str> {
         (self.state == State::Recovering).then_some(RECOVERING_BANNER)
+    }
+
+    /// Confirmation of the last transmit, until disconnected.
+    pub fn last_sent(&self) -> Option<&str> {
+        self.last_sent.as_deref()
     }
 
     pub fn last_error(&self) -> Option<&str> {
@@ -199,9 +209,20 @@ mod tests {
     }
 
     #[test]
+    fn sent_codes_are_confirmed() {
+        let mut v = connected();
+        assert_eq!(v.last_sent(), None);
+        assert!(v.apply(&Event::Transmitted { pulses: 68 }));
+        assert_eq!(v.last_sent(), Some("Sent 68 pulses."));
+        assert!(v.apply(&Event::RawSent { bytes: 4 }));
+        assert_eq!(v.last_sent(), Some("Sent 4 raw bytes."));
+        v.apply(&Event::State(State::Disconnected));
+        assert_eq!(v.last_sent(), None);
+    }
+
+    #[test]
     fn unrelated_events_change_nothing() {
         let mut v = connected();
-        assert!(!v.apply(&Event::Transmitted { pulses: 3 }));
         assert!(!v.apply(&Event::Learned(LearnOutcome::NothingReceived)));
         assert!(!v.apply(&Event::State(State::Ready)), "same state again");
     }
