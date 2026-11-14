@@ -10,6 +10,7 @@
 //! Decoding uses the standard order and accepts extended (16-bit) addresses.
 
 use crate::pulse::Pulse;
+use crate::timing::near;
 
 /// Order in which the bits of each byte are sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,9 +38,6 @@ pub enum NecFrame {
     /// The short repeat frame sent while a button is held.
     Repeat,
 }
-
-/// Allowed deviation from nominal timings, in percent.
-pub const TOLERANCE_PERCENT: u32 = 30;
 
 /// Encodes one frame per (address, command) pair in `pairs`.
 pub fn encode(pairs: &[u8], order: BitOrder) -> Result<Vec<Pulse>, NecError> {
@@ -117,11 +115,6 @@ pub fn decode(frame: &[Pulse]) -> Option<NecFrame> {
     }
 }
 
-/// True when `value` is within [`TOLERANCE_PERCENT`] of `nominal`.
-fn near(value: u32, nominal: u32) -> bool {
-    let (value, nominal) = (u64::from(value) * 100, u64::from(nominal));
-    value >= nominal * u64::from(100 - TOLERANCE_PERCENT) && value <= nominal * u64::from(100 + TOLERANCE_PERCENT)
-}
 
 #[cfg(test)]
 mod tests {

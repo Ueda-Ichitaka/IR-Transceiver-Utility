@@ -8,7 +8,9 @@
 //! - [`command`]: the four-byte commands sent to the dongle
 //! - [`identify`]: classifying the identify reply into a protocol variant
 //! - [`learn`]: reassembling a learned IR code from bulk IN transfers
+//! - [`protocols`]: decoders for RC5, RC6, Sony SIRC, Samsung32, Kaseikyo
 //! - [`pulse`]: decoding learned bytes into on/off pulse durations
+//! - [`timing`]: timing tolerance shared by the decoders
 //! - [`frames`]: splitting a pulse train into frames at long gaps
 //! - [`nec`]: encoding and decoding NEC address/command frames
 //! - [`transmit`]: compressing pulses and building the transmit chunks
@@ -18,5 +20,7 @@ pub mod frames;
 pub mod identify;
 pub mod learn;
 pub mod nec;
+pub mod protocols;
 pub mod pulse;
+pub mod timing;
 pub mod transmit;
