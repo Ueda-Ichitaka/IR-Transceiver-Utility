@@ -104,6 +104,7 @@ pub struct CaptureLog {
     transfers: Vec<u64>,
     last_at: Duration,
     last_wall_ms: Option<u64>,
+    short_reads: usize,
     full: bool,
 }
 
@@ -116,6 +117,7 @@ impl CaptureLog {
             transfers: Vec::new(),
             last_at: Duration::ZERO,
             last_wall_ms: None,
+            short_reads: 0,
             full: false,
         }
     }
@@ -137,8 +139,10 @@ impl CaptureLog {
             return Applied::default();
         }
         let is_signal = matches!(item, Item::Signal(_));
+        let is_short = matches!(&item, Item::Signal(row) if !row.complete);
         match self.items.push(item) {
             Pushed::Stored { seq, .. } => {
+                self.short_reads += usize::from(is_short);
                 if is_signal {
                     self.signals.push(seq);
                 } else {
@@ -195,8 +199,10 @@ impl CaptureLog {
                 break;
             }
             let is_signal = matches!(item, Item::Signal(_));
+            let is_short = matches!(&item, Item::Signal(row) if !row.complete);
             match self.items.push(item) {
                 Pushed::Stored { seq, .. } => {
+                    self.short_reads += usize::from(is_short);
                     if is_signal { self.signals.push(seq) } else { self.transfers.push(seq) }
                     stored += 1;
                 }
@@ -204,6 +210,15 @@ impl CaptureLog {
             }
         }
         stored
+    }
+
+    /// Frames, complete codes and short reads for the status bar.
+    pub fn stats(&self) -> crate::capture_view::Stats {
+        crate::capture_view::Stats {
+            frames: self.transfers.len(),
+            codes: self.signals.len() - self.short_reads,
+            short_reads: self.short_reads,
+        }
     }
 
     /// True once the limit was reached; cleared by `clear`.
@@ -219,6 +234,7 @@ impl CaptureLog {
         self.items.clear();
         self.signals.clear();
         self.transfers.clear();
+        self.short_reads = 0;
         self.full = false;
     }
 }
@@ -355,6 +371,19 @@ mod tests {
         assert_eq!(log.transfer(0).unwrap().wall_ms, Some(1_700_000_000_500));
         assert_eq!(log.signal(0).unwrap().wall_ms, Some(1_700_000_000_500));
         assert_eq!(log.signal(0).unwrap().announced_len, 2);
+    }
+
+    #[test]
+    fn stats_count_frames_codes_and_short_reads() {
+        let mut log = CaptureLog::new(1 << 20);
+        log.apply(&transfer(0, recorder::Event::In(vec![1])));
+        log.apply(&learned(vec![0x23, 0x37]));
+        log.apply(&Event::Learned(LearnOutcome::Short(LearnedCode { announced_len: 9, data: vec![0x23] })));
+        log.import(vec![SignalRow::from_learned(Duration::ZERO, None, false, 5, vec![1])], vec![]);
+        let stats = log.stats();
+        assert_eq!((stats.frames, stats.codes, stats.short_reads), (1, 1, 2));
+        log.clear();
+        assert_eq!(log.stats(), crate::capture_view::Stats::default());
     }
 
     #[test]

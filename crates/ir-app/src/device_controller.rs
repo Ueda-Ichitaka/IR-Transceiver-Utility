@@ -11,6 +11,8 @@ pub mod qobject {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qstringlist.h");
+        type QStringList = cxx_qt_lib::QStringList;
     }
 
     #[auto_cxx_name]
@@ -32,6 +34,7 @@ pub mod qobject {
         #[qproperty(i32, transfer_count, READ = transfer_count, NOTIFY = capture_changed)]
         #[qproperty(bool, capture_full, READ = capture_full, NOTIFY = capture_changed)]
         #[qproperty(QString, capture_usage, READ = capture_usage, NOTIFY = capture_changed)]
+        #[qproperty(QStringList, capture_status, READ = capture_status, NOTIFY = capture_changed)]
         type DeviceController = super::DeviceControllerRust;
     }
 
@@ -51,6 +54,7 @@ pub mod qobject {
         fn transfer_count(self: &DeviceController) -> i32;
         fn capture_full(self: &DeviceController) -> bool;
         fn capture_usage(self: &DeviceController) -> QString;
+        fn capture_status(self: &DeviceController) -> QStringList;
     }
 
     #[auto_cxx_name]
@@ -93,7 +97,7 @@ pub mod qobject {
 
 use std::pin::Pin;
 use cxx_qt::Threading;
-use cxx_qt_lib::QString;
+use cxx_qt_lib::{QString, QStringList};
 use ir_session::session::{Command, Event, Session};
 use ir_session::usb::UsbConnector;
 use ir_session::worker;
@@ -101,6 +105,7 @@ use ir_library::model::{Code, Payload};
 use ir_view::app::Update;
 use ir_view::send::command_for;
 use ir_view::capture::usage_text;
+use ir_view::capture_view::status_parts;
 use ir_transport::recorder::now_unix_ms;
 use ir_view::replay::{TV_POWER_LOG, events_from_probe_log};
 
@@ -173,6 +178,19 @@ impl qobject::DeviceController {
 
     fn capture_usage(&self) -> QString {
         state::with(|s| QString::from(&usage_text(s.core.capture.used_bytes(), s.core.settings.capture.limit_mib)))
+    }
+
+    fn capture_status(&self) -> QStringList {
+        let parts = state::with(|s| {
+            status_parts(
+                s.core.capturing_for(),
+                s.core.capture.stats(),
+                s.core.capture.used_bytes(),
+                s.core.settings.capture.limit_mib,
+            )
+        });
+        let parts: Vec<QString> = parts.iter().map(QString::from).collect();
+        parts.iter().collect()
     }
 
     fn connect_device(self: Pin<&mut Self>) {

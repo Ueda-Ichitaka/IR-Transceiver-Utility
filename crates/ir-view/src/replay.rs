@@ -3,7 +3,9 @@
 //! Exists so a recorded hardware session can be fed through the GUI without
 //! a dongle: the GUI smoke test replays the fixture of a learned TV remote to
 //! check that capture rows really render. Transfer lines become transfer
-//! events, each `# data:` line a completed learn.
+//! events, each `# data:` line a completed learn, placed after the IN
+//! transfers it arrived in (before the next OUT transfer), as in a live
+//! capture.
 
 use std::time::Duration;
 
@@ -15,9 +17,9 @@ use ir_transport::recorder::{self, Entry};
 /// The fixture recorded from a TV remote (three learned codes).
 pub const TV_POWER_LOG: &str = include_str!("../../../fixtures/1794596116-learn-tv-power.log");
 
-/// Transfer events of the log in order, followed by one learned event per
-/// `# data:` line, with wall-clock times counted from `base_wall_ms`. Lines
-/// that do not parse are skipped.
+/// Transfer events of the log in order with one learned event per `# data:`
+/// line, each after the IN transfers of its reply; wall-clock times count
+/// from `base_wall_ms`. Lines that do not parse are skipped.
 pub fn events_from_probe_log(text: &str, base_wall_ms: u64) -> Vec<Event> {
     let mut transfers = Vec::new();
     let mut learned = Vec::new();
@@ -27,11 +29,25 @@ pub fn events_from_probe_log(text: &str, base_wall_ms: u64) -> Vec<Event> {
                 learned.push(Event::Learned(LearnOutcome::Complete(LearnedCode { announced_len: data.len(), data })));
             }
         } else if let Some(entry) = transfer(line, base_wall_ms) {
-            transfers.push(Event::Transfer(entry));
+            transfers.push(entry);
         }
     }
-    transfers.extend(learned);
-    transfers
+    let mut learned = learned.into_iter();
+    let mut events = Vec::new();
+    let mut in_reply = false;
+    for entry in transfers {
+        match &entry.event {
+            recorder::Event::In(bytes) if bytes.starts_with(&[0xFE; 4]) => in_reply = true,
+            recorder::Event::Out(_) if in_reply => {
+                events.extend(learned.next());
+                in_reply = false;
+            }
+            _ => {}
+        }
+        events.push(Event::Transfer(entry));
+    }
+    events.extend(learned);
+    events
 }
 
 /// `   0.010  OUT  FC FC FC FC` -> an entry.
@@ -79,7 +95,23 @@ mod tests {
         assert_eq!(learned[0].data.len(), 216);
         assert_eq!(learned[0].announced_len, 216);
         assert_eq!(&learned[0].data[..4], &[0xFF, 0xFF, 0x37, 0xFF]);
-        assert!(matches!(events.last(), Some(Event::Learned(_))));
+
+    }
+
+    #[test]
+    fn each_code_follows_the_transfers_it_arrived_in() {
+        let events = events_from_probe_log(TV_POWER_LOG, 0);
+        let learned_positions: Vec<usize> =
+            events.iter().enumerate().filter(|(_, e)| matches!(e, Event::Learned(_))).map(|(i, _)| i).collect();
+        for &i in &learned_positions {
+            let before = &events[i - 1];
+            assert!(
+                matches!(before, Event::Transfer(Entry { event: recorder::Event::In(_), .. })),
+                "code at {i} follows an IN transfer, not {before:?}"
+            );
+        }
+        let Event::Transfer(after_first) = &events[learned_positions[0] + 1] else { panic!() };
+        assert_eq!(after_first.event, recorder::Event::Out(vec![0xFD; 4]), "then the stop command");
     }
 
     #[test]

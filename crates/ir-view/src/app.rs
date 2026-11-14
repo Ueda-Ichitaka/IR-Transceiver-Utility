@@ -5,6 +5,8 @@
 //! delivers, and reports what changed and whether capture must stop because
 //! the capture limit was reached.
 
+use std::time::Instant;
+
 use ir_session::session::{Event, State};
 use ir_settings::Settings;
 
@@ -17,6 +19,7 @@ pub struct AppCore {
     pub device: DeviceView,
     pub capture: CaptureLog,
     pub settings: Settings,
+    capture_started: Option<Instant>,
 }
 
 /// What a batch of events changed.
@@ -42,13 +45,26 @@ impl AppCore {
             device: DeviceView::default(),
             capture: CaptureLog::new(settings.capture_limit_bytes()),
             settings,
+            capture_started: None,
         }
+    }
+
+    /// How long the current capture has been running.
+    pub fn capturing_for(&self) -> Option<std::time::Duration> {
+        self.capture_started.map(|start| start.elapsed())
     }
 
     pub fn apply(&mut self, events: &[Event]) -> Update {
         let mut update = Update::default();
         for event in events {
             update.status_changed |= self.device.apply(event);
+            if let Event::State(state) = event {
+                self.capture_started = match (state, self.capture_started) {
+                    (State::Capturing, Some(start)) => Some(start),
+                    (State::Capturing, None) => Some(Instant::now()),
+                    _ => None,
+                };
+            }
             let applied = self.capture.apply(event);
             update.signals_added += usize::from(applied.signal_added);
             update.transfers_added += usize::from(applied.transfer_added);
@@ -123,6 +139,18 @@ mod tests {
         let update = core.apply(&[Event::State(State::Ready), chunk()]);
         assert!(!update.stop_capture);
         assert_eq!(core.device.last_error(), Some(limit_message(0).as_str()));
+    }
+
+    #[test]
+    fn capture_start_is_tracked() {
+        let mut core = AppCore::new(Settings::default());
+        assert!(core.capturing_for().is_none());
+        core.apply(&[Event::State(State::Capturing)]);
+        assert!(core.capturing_for().is_some());
+        core.apply(&[Event::State(State::Capturing)]);
+        assert!(core.capturing_for().unwrap() < std::time::Duration::from_secs(1), "kept from the first event");
+        core.apply(&[Event::State(State::Recovering)]);
+        assert!(core.capturing_for().is_none());
     }
 
     #[test]

@@ -21,6 +21,7 @@ pub mod qobject {
         #[qproperty(bool, first_frame_only)]
         #[qproperty(i32, repeat_count)]
         #[qproperty(QString, limit_mib_text)]
+        #[qproperty(bool, time_of_day)]
         #[qproperty(bool, uppercase)]
         #[qproperty(QString, bytes_per_line_text)]
         #[qproperty(bool, offer_pulses)]
@@ -58,6 +59,7 @@ pub struct SettingsControllerRust {
     first_frame_only: bool,
     repeat_count: i32,
     limit_mib_text: QString,
+    time_of_day: bool,
     uppercase: bool,
     bytes_per_line_text: QString,
     offer_pulses: bool,
@@ -75,6 +77,7 @@ impl qobject::SettingsController {
         self.as_mut().set_first_frame_only(first_frame_only);
         self.as_mut().set_repeat_count(i32::try_from(count).unwrap_or(i32::MAX));
         self.as_mut().set_limit_mib_text(QString::from(&form.limit_mib_text));
+        self.as_mut().set_time_of_day(form.time_of_day);
         self.as_mut().set_uppercase(form.uppercase);
         self.as_mut().set_bytes_per_line_text(QString::from(&form.bytes_per_line_text));
         self.as_mut().set_offer_pulses(form.offer_pulses);
@@ -90,6 +93,7 @@ impl qobject::SettingsController {
                 RepeatMode::AsLearned
             },
             limit_mib_text: self.limit_mib_text.to_string(),
+            time_of_day: self.time_of_day,
             uppercase: self.uppercase,
             bytes_per_line_text: self.bytes_per_line_text.to_string(),
             offer_pulses: self.offer_pulses,

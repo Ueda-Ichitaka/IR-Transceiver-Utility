@@ -9,6 +9,7 @@ fn main() {
             "src/qml/Main.qml",
             "src/qml/CapturePage.qml",
             "src/qml/CaptureList.qml",
+            "src/qml/CaptureDetail.qml",
             "src/qml/DevicePage.qml",
             "src/qml/SendPage.qml",
             "src/qml/LibraryPage.qml",

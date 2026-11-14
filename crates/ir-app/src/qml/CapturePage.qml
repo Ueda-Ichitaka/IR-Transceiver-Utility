@@ -1,10 +1,11 @@
-// CapturePage.qml - live capture with a Signals tab and a Transfers tab.
+// CapturePage.qml - live capture, laid out as in the mockup.
 //
-// Learn once / Start / Stop / Clear act on the dongle through the
-// DeviceController singleton; Import loads an exported capture (replacing or
-// appending) and Export writes it, both through FileActions. Each tab is a ListView over its own
-// CaptureModel with its own encoding switch; rows are appended as the
-// session reports them (captureChanged -> sync).
+// Header actions: start/stop capture (one toggle), learn once, pause view,
+// clear, import (replace or append) and export. Below: the Signals and
+// Transfers tabs with each tab's encoding switch as segmented buttons, a
+// split view of the compact row list and the detail panel of the selected
+// row (it moves under the list on narrow windows), and the status bar.
+// Pause view stops the lists from following new rows while capture goes on.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
@@ -19,6 +20,8 @@ Kirigami.Page {
     padding: 0
 
     readonly property int learnWaitSeconds: 30
+    readonly property CaptureModel currentModel: tabs.currentIndex === 0 ? signalModel : transferModel
+    property bool paused: false
 
     // Loads an exported capture, replacing the current one or appending.
     function importCapture(url, replace) {
@@ -36,24 +39,42 @@ Kirigami.Page {
         tabs.currentIndex = index;
     }
 
+    // Selects a row of the current tab for the detail panel.
+    function selectRow(row) {
+        currentModel.select(row);
+    }
+
     actions: [
         Kirigami.Action {
+            text: DeviceController.canStopCapture ? i18nc("@action:button", "Stop capture") : i18nc("@action:button", "Start capture")
+            icon.name: DeviceController.canStopCapture ? "media-playback-stop" : "media-record"
+            enabled: DeviceController.canStopCapture || DeviceController.ready
+            onTriggered: DeviceController.canStopCapture ? DeviceController.stopCapture() : DeviceController.startCapture()
+        },
+        Kirigami.Action {
             text: i18nc("@action:button", "Learn once")
-            icon.name: "media-record"
+            icon.name: "media-playback-start"
             enabled: DeviceController.ready
             onTriggered: DeviceController.learnOnce(page.learnWaitSeconds)
         },
         Kirigami.Action {
-            text: i18nc("@action:button", "Start capture")
-            icon.name: "media-playback-start"
-            enabled: DeviceController.ready
-            onTriggered: DeviceController.startCapture()
+            text: i18nc("@action:button", "Pause view")
+            icon.name: "media-playback-pause"
+            checkable: true
+            checked: page.paused
+            onToggled: {
+                page.paused = checked;
+                if (!checked) {
+                    signalModel.sync();
+                    transferModel.sync();
+                }
+            }
         },
         Kirigami.Action {
-            text: i18nc("@action:button", "Stop")
-            icon.name: "media-playback-stop"
-            enabled: DeviceController.canStopCapture
-            onTriggered: DeviceController.stopCapture()
+            text: i18nc("@action:button", "Clear")
+            icon.name: "edit-clear-history"
+            enabled: DeviceController.signalCount > 0 || DeviceController.transferCount > 0
+            onTriggered: DeviceController.clearCapture()
         },
         Kirigami.Action {
             text: i18nc("@action:button", "Import")
@@ -70,7 +91,7 @@ Kirigami.Page {
             }
         },
         Kirigami.Action {
-            text: i18nc("@action:button", "Export")
+            text: i18nc("@action:button", "Export…")
             icon.name: "document-export"
             enabled: DeviceController.signalCount > 0 || DeviceController.transferCount > 0
 
@@ -95,21 +116,34 @@ Kirigami.Page {
                 text: i18nc("@action:inmenu", "Signals as Flipper file…")
                 onTriggered: exportDialog.ask("flipper", "ir", i18nc("@item:inlistbox", "Flipper IR files (*.ir)"))
             }
-        },
-        Kirigami.Action {
-            text: i18nc("@action:button", "Clear")
-            icon.name: "edit-clear-history"
-            enabled: DeviceController.signalCount > 0 || DeviceController.transferCount > 0
-            onTriggered: DeviceController.clearCapture()
         }
     ]
 
     Connections {
         target: DeviceController
         function onCaptureChanged() {
-            signalModel.sync();
-            transferModel.sync();
+            if (!page.paused) {
+                signalModel.sync();
+                transferModel.sync();
+            }
         }
+    }
+
+    Connections {
+        target: SettingsController
+        function onSaved() {
+            signalModel.reformat();
+            transferModel.reformat();
+            DeviceController.refreshCapture();
+        }
+    }
+
+    // Keeps the capture duration in the status bar current.
+    Timer {
+        interval: 1000
+        repeat: true
+        running: DeviceController.canStopCapture
+        onTriggered: DeviceController.refreshCapture()
     }
 
     Dialogs.FileDialog {
@@ -135,15 +169,6 @@ Kirigami.Page {
         }
         fileMode: Dialogs.FileDialog.SaveFile
         onAccepted: FileActions.exportCapture(selectedFile, format)
-    }
-
-    Connections {
-        target: SettingsController
-        function onSaved() {
-            signalModel.reformat();
-            transferModel.reformat();
-            DeviceController.refreshCapture();
-        }
     }
 
     CaptureModel {
@@ -206,33 +231,78 @@ Kirigami.Page {
                 }
             }
 
-            Controls.ComboBox {
-                id: displaySwitch
-                readonly property CaptureModel model_: tabs.currentIndex === 0 ? signalModel : transferModel
-                model: model_.displayOptions
-                currentIndex: model_.displayIndex
-                onActivated: index => model_.displayIndex = index
-            }
-
-            Controls.Label {
-                text: DeviceController.captureUsage
-                color: DeviceController.captureFull ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.disabledTextColor
+            // Encoding switch of the current tab, as segmented buttons.
+            Row {
+                spacing: 0
+                Repeater {
+                    model: page.currentModel.displayOptions
+                    delegate: Controls.Button {
+                        required property int index
+                        required property string modelData
+                        text: modelData
+                        checkable: true
+                        checked: page.currentModel.displayIndex === index
+                        onClicked: page.currentModel.displayIndex = index
+                    }
+                }
             }
         }
 
-        StackLayout {
+        Controls.SplitView {
+            id: split
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: tabs.currentIndex
+            orientation: page.width < Kirigami.Units.gridUnit * 40 ? Qt.Vertical : Qt.Horizontal
 
-            CaptureList {
-                model: signalModel
-                showSummary: true
+            StackLayout {
+                Controls.SplitView.fillWidth: true
+                Controls.SplitView.fillHeight: true
+                Controls.SplitView.minimumWidth: Kirigami.Units.gridUnit * 16
+                Controls.SplitView.minimumHeight: Kirigami.Units.gridUnit * 8
+                currentIndex: tabs.currentIndex
+
+                CaptureList {
+                    model: signalModel
+                    paused: page.paused
+                }
+
+                CaptureList {
+                    model: transferModel
+                    paused: page.paused
+                }
             }
 
-            CaptureList {
-                model: transferModel
-                showSummary: false
+            CaptureDetail {
+                model: page.currentModel
+                signalsTab: tabs.currentIndex === 0
+                Controls.SplitView.preferredWidth: Kirigami.Units.gridUnit * 22
+                Controls.SplitView.preferredHeight: Kirigami.Units.gridUnit * 14
+                Controls.SplitView.minimumWidth: Kirigami.Units.gridUnit * 14
+            }
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+        }
+
+        // Status bar.
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.largeSpacing
+
+            Repeater {
+                model: DeviceController.captureStatus
+                delegate: Controls.Label {
+                    required property int index
+                    required property string modelData
+                    text: modelData
+                    color: index === 4 && DeviceController.captureFull ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.disabledTextColor
+                    font: Kirigami.Theme.smallFont
+                }
+            }
+            Item {
+                Layout.fillWidth: true
             }
         }
     }

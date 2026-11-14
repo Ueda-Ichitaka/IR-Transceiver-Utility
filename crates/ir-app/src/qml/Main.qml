@@ -4,7 +4,8 @@
 // to the pages, and the connection status always shown in the sidebar
 // footer. On start it connects to the first dongle found (design decision 9).
 // With --smoke-test it does not connect: it opens every page, replays the
-// recorded fixture into the capture page, logs markers and quits.
+// recorded fixture into the capture page, logs markers and quits;
+// --smoke-screenshots=<dir> also saves pictures of the capture page.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
@@ -115,53 +116,73 @@ Kirigami.ApplicationWindow {
     pageStack.initialPage: capturePage
 
     // Smoke test: shows one page per step so each is laid out in the scene.
+    // Smoke test: one step per timer tick, so each page and list is laid
+    // out and rendered before the next step. First every page is shown, then
+    // the capture page is exercised with the recorded fixture.
+    // With --smoke-screenshots=<dir>, saves the capture page as <dir>/<name>.png.
+    function smokeScreenshot(name) {
+        const arg = Qt.application.arguments.find(a => a.startsWith("--smoke-screenshots="));
+        if (arg) {
+            const path = arg.substring("--smoke-screenshots=".length) + "/" + name + ".png";
+            capturePage.grabToImage(result => result.saveToFile(path));
+        }
+    }
+
+    readonly property var smokeActions: [
+        function () {
+            root.showPage(capturePage);
+            DeviceController.replayFixture();
+            capturePage.showTab(0);
+            capturePage.selectRow(0);
+        },
+        function () {
+            root.smokeScreenshot("capture-signals");
+        },
+        function () {
+            capturePage.showTab(1);
+            capturePage.selectRow(1);
+        },
+        function () {
+            root.smokeScreenshot("capture-transfers");
+        },
+        function () {
+            LibraryModel.saveSignal(0);
+            root.showPage(libraryPage);
+        },
+        function () {
+            const arg = Qt.application.arguments.find(a => a.startsWith("--smoke-import="));
+            root.showPage(capturePage);
+            capturePage.showTab(0);
+            if (arg) {
+                capturePage.importCapture("file://" + arg.substring("--smoke-import=".length), true);
+                console.info("ir-transceiver: imported " + DeviceController.signalCount + " signals");
+            }
+        },
+        function () {
+            console.info("ir-transceiver: status " + DeviceController.captureStatus.slice(0, 4).join(", "));
+        }
+    ]
+
     Timer {
         id: smokeSteps
         property int next: 0
-        property bool replayed: false
-        property bool savedToLibrary: false
-        property bool imported: false
         interval: 50
         repeat: true
         onTriggered: {
-            if (next > 0) {
+            const pageCount = root.pages.length;
+            if (next > 0 && next <= pageCount) {
                 console.info("ir-transceiver: page " + root.pages[next - 1].name + " ready");
             }
-            if (next === root.pages.length) {
-                // Last step: replay the fixture into the capture page and let
-                // both tabs render their rows.
-                if (!replayed) {
-                    replayed = true;
-                    root.showPage(capturePage);
-                    DeviceController.replayFixture();
-                    capturePage.showTab(1);
-                    return;
-                }
-                // Then save the first signal and let the library render it.
-                if (!savedToLibrary) {
-                    savedToLibrary = true;
-                    LibraryModel.saveSignal(0);
-                    root.showPage(libraryPage);
-                    return;
-                }
-                // Then import the file given by the test, replacing the capture.
-                if (!imported) {
-                    imported = true;
-                    const arg = Qt.application.arguments.find(a => a.startsWith("--smoke-import="));
-                    if (arg) {
-                        root.showPage(capturePage);
-                        capturePage.showTab(0);
-                        capturePage.importCapture("file://" + arg.substring("--smoke-import=".length), true);
-                        console.info("ir-transceiver: imported " + DeviceController.signalCount + " signals");
-                    }
-                    return;
-                }
+            if (next < pageCount) {
+                root.showPage(root.pages[next].page);
+            } else if (next < pageCount + root.smokeActions.length) {
+                root.smokeActions[next - pageCount]();
+            } else {
                 stop();
                 console.info("ir-transceiver: main window ready");
                 Qt.exit(0);
                 return;
             }
-            root.showPage(root.pages[next].page);
             next += 1;
         }
     }

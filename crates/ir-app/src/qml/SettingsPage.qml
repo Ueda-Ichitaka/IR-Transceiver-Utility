@@ -72,6 +72,12 @@ Kirigami.ScrollablePage {
                 text: SettingsController.limitMibText
                 onTextEdited: SettingsController.limitMibText = text
             }
+            Controls.ComboBox {
+                Kirigami.FormData.label: i18nc("@label:listbox", "Time column:")
+                model: [i18nc("@item:inlistbox", "Time of day"), i18nc("@item:inlistbox", "Seconds since connecting")]
+                currentIndex: SettingsController.timeOfDay ? 0 : 1
+                onActivated: index => SettingsController.timeOfDay = index === 0
+            }
 
             Kirigami.Separator {
                 Kirigami.FormData.isSection: true

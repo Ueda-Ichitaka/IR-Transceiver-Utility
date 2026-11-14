@@ -3,7 +3,7 @@
 //! Exists to keep every user-adjustable default in one typed place (design
 //! decisions 12, 13, 15, 19, 20 and the settings-store decision): the global
 //! carrier frequency and repeat mode for sending, the encoding switch options
-//! of each view, the capture limit and the preferred dongle. Missing fields
+//! of each view, the capture limit and time column, and the preferred dongle. Missing fields
 //! take their defaults, so older files keep loading; a damaged file is moved
 //! aside like the library file.
 
@@ -44,6 +44,9 @@ pub struct SendSettings {
 pub struct CaptureSettings {
     /// Capture stops when the captured data reaches this size.
     pub limit_mib: u64,
+    /// The time column shows the time of day instead of the seconds since
+    /// connecting.
+    pub time_of_day: bool,
 }
 
 /// The encoding switch options of each view (the capture page has one per
@@ -131,7 +134,7 @@ impl Default for SendSettings {
 
 impl Default for CaptureSettings {
     fn default() -> Self {
-        Self { limit_mib: 4096 }
+        Self { limit_mib: 4096, time_of_day: true }
     }
 }
 
@@ -257,6 +260,7 @@ mod tests {
         assert_eq!(s.send.carrier_hz, 38_000);
         assert_eq!(s.send.repeat, RepeatMode::AsLearned);
         assert_eq!(s.capture.limit_mib, 4096);
+        assert!(s.capture.time_of_day);
         assert_eq!(s.capture_limit_bytes(), 4096 * 1024 * 1024);
         for view in [s.views.capture, s.views.transfers, s.views.send, s.views.library] {
             assert_eq!(view.encoding, Encoding::Hex);
@@ -274,6 +278,7 @@ mod tests {
         s.send.carrier_hz = 36_000;
         s.send.repeat = RepeatMode::FirstFrame { count: 3 };
         s.capture.limit_mib = 512;
+        s.capture.time_of_day = false;
         s.views.capture.encoding = Encoding::Base64;
         s.views.send.encoding = Encoding::Binary;
         s.views.library.encoding = Encoding::Decimal;

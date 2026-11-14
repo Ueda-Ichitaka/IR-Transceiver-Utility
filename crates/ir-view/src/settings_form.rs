@@ -1,10 +1,10 @@
 //! The Settings page form.
 //!
 //! Exists to edit the user settings with validation: the global carrier and
-//! repeat defaults (design decisions 12, 13), the capture limit (15) and the
-//! display options shared by every view's encoding switch (19, 20:
-//! uppercase hex, bytes per line, whether pulse timings are offered). Each
-//! view keeps its own selected encoding.
+//! repeat defaults (design decisions 12, 13), the capture limit (15), the
+//! capture time column, and the display options shared by every view's
+//! encoding switch (19, 20: uppercase hex, bytes per line, whether pulse
+//! timings are offered). Each view keeps its own selected encoding.
 
 use ir_library::model::RepeatMode;
 use ir_settings::Settings;
@@ -20,6 +20,8 @@ pub struct SettingsForm {
     pub carrier_text: String,
     pub repeat: RepeatMode,
     pub limit_mib_text: String,
+    /// The capture time column shows the time of day.
+    pub time_of_day: bool,
     pub uppercase: bool,
     pub bytes_per_line_text: String,
     pub offer_pulses: bool,
@@ -32,6 +34,7 @@ impl SettingsForm {
             carrier_text: settings.send.carrier_hz.to_string(),
             repeat: settings.send.repeat,
             limit_mib_text: settings.capture.limit_mib.to_string(),
+            time_of_day: settings.capture.time_of_day,
             uppercase: view.uppercase,
             bytes_per_line_text: view.bytes_per_line.to_string(),
             offer_pulses: view.offer_pulses,
@@ -61,6 +64,7 @@ impl SettingsForm {
         settings.send.carrier_hz = carrier_hz;
         settings.send.repeat = self.repeat;
         settings.capture.limit_mib = limit_mib;
+        settings.capture.time_of_day = self.time_of_day;
         let views = &mut settings.views;
         for view in [&mut views.capture, &mut views.transfers, &mut views.send, &mut views.library] {
             view.uppercase = self.uppercase;
@@ -87,6 +91,7 @@ mod tests {
                 carrier_text: "38000".into(),
                 repeat: RepeatMode::FirstFrame { count: 2 },
                 limit_mib_text: "4096".into(),
+                time_of_day: true,
                 uppercase: true,
                 bytes_per_line_text: "8".into(),
                 offer_pulses: true,
@@ -102,12 +107,14 @@ mod tests {
             carrier_text: " 36000 ".into(),
             repeat: RepeatMode::AsLearned,
             limit_mib_text: "512".into(),
+            time_of_day: false,
             uppercase: false,
             bytes_per_line_text: "0".into(),
             offer_pulses: false,
         };
         form.apply(&mut s).unwrap();
         assert_eq!((s.send.carrier_hz, s.send.repeat, s.capture.limit_mib), (36_000, RepeatMode::AsLearned, 512));
+        assert!(!s.capture.time_of_day);
         for view in [s.views.capture, s.views.transfers, s.views.send, s.views.library] {
             assert_eq!((view.uppercase, view.bytes_per_line, view.offer_pulses), (false, 0, false));
         }

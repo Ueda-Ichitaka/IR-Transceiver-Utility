@@ -71,11 +71,13 @@ fn main_window_loads_offscreen() {
     }
     // Rendered capture rows log their visible text.
     for row in [
-        "ir-transceiver: row complete | NEC addr 0x00 cmd 0x59, NEC repeat x5 | FF FF 37 FF",
-        "ir-transceiver: row OUT |  | FC FC FC FC",
+        "ir-transceiver: row 1 | IR 216 B | FF FF 37 FF",
+        "ir-transceiver: row 1 | identify | FC FC FC FC",
+        "ir-transceiver: detail Signal #1 | NEC addr 0x00 cmd 0x59, NEC repeat x5 | 44 pulses drawn",
         "ir-transceiver: code NEC addr 0x00 cmd 0x59 | NEC addr 0x00 cmd 0x59, NEC repeat x5 · default carrier · 216 B",
-        "ir-transceiver: row complete | unknown | 23 37",
+        "ir-transceiver: row 1 | IR 2 B | 23 37",
         "ir-transceiver: imported 1 signals",
+        "ir-transceiver: status Not capturing, 0 frames, 1 IR code, 0 short reads",
     ] {
         assert!(stderr.contains(row), "{row:?} missing, stderr:\n{stderr}");
     }
