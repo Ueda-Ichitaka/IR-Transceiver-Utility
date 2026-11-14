@@ -214,9 +214,9 @@ mod tests {
         let bin = export_capture(&log, CaptureFormat::Bin, 38_000).unwrap();
         assert_eq!(bin, Output { bytes: vec![0xAB, 0xCD], skipped: vec![] });
         let csv = export_capture(&log, CaptureFormat::TransfersCsv, 38_000).unwrap();
-        assert!(String::from_utf8(csv.bytes).unwrap().starts_with("time,direction"));
+        assert!(String::from_utf8(csv.bytes).unwrap().starts_with("time,unix_ms,direction"));
         let csv = export_capture(&log, CaptureFormat::SignalsCsv, 38_000).unwrap();
-        assert!(String::from_utf8(csv.bytes).unwrap().starts_with("time,status"));
+        assert!(String::from_utf8(csv.bytes).unwrap().starts_with("time,unix_ms,status"));
         let json = export_capture(&log, CaptureFormat::Json, 38_000).unwrap();
         assert!(String::from_utf8(json.bytes).unwrap().contains("\"signals\""));
     }

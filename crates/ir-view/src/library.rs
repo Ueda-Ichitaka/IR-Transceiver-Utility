@@ -166,7 +166,9 @@ mod tests {
     fn captured_signal_becomes_a_learned_code() {
         let row = SignalRow {
             at: Duration::from_millis(1500),
+            wall_ms: None,
             complete: true,
+            announced_len: 216,
             data: fixture_data(),
             pulses: Some(vec![Pulse { on_us: 1, off_us: 1 }]),
             summary: "NEC addr 0x00 cmd 0x59, NEC repeat x5".into(),

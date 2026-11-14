@@ -29,7 +29,7 @@ pub fn import_capture(bytes: &[u8], path: &Path) -> Result<ImportedCapture, Stri
             return Err("the file is empty".into());
         }
         return Ok(ImportedCapture {
-            signals: vec![SignalRow::from_learned(Duration::ZERO, true, bytes.to_vec())],
+            signals: vec![SignalRow::from_learned(Duration::ZERO, None, true, bytes.len(), bytes.to_vec())],
             transfers: Vec::new(),
         });
     }
@@ -41,8 +41,8 @@ pub fn import_capture(bytes: &[u8], path: &Path) -> Result<ImportedCapture, Stri
     }
     let records = csv_records(text);
     match records.first().map(|(_, fields)| fields.join(",")) {
-        Some(header) if header == "time,status,length,summary,data" => signals_from_csv(&records[1..]),
-        Some(header) if header == "time,direction,length,data" => transfers_from_csv(&records[1..]),
+        Some(header) if header == "time,unix_ms,status,length,announced,summary,data" => signals_from_csv(&records[1..]),
+        Some(header) if header == "time,unix_ms,direction,length,data" => transfers_from_csv(&records[1..]),
         _ => Err(unknown()),
     }
 }
@@ -56,13 +56,19 @@ struct JsonLog {
 #[derive(Deserialize)]
 struct JsonSignal {
     time_s: f64,
+    #[serde(default)]
+    unix_ms: Option<u64>,
     complete: bool,
+    #[serde(default)]
+    announced_len: Option<usize>,
     data: String,
 }
 
 #[derive(Deserialize)]
 struct JsonTransfer {
     time_s: f64,
+    #[serde(default)]
+    unix_ms: Option<u64>,
     direction: String,
     data: String,
     error: Option<String>,
@@ -86,7 +92,8 @@ fn from_json(text: &str) -> Result<ImportedCapture, String> {
         .map(|(i, s)| {
             let at = seconds(s.time_s).ok_or_else(|| json_err("signal", i, "invalid time".into()))?;
             let data = hex(&s.data).map_err(|e| json_err("signal", i, e))?;
-            Ok(SignalRow::from_learned(at, s.complete, data))
+            let announced = s.announced_len.unwrap_or(data.len());
+            Ok(SignalRow::from_learned(at, s.unix_ms, s.complete, announced, data))
         })
         .collect::<Result<_, String>>()?;
     let transfers = log
@@ -102,7 +109,7 @@ fn from_json(text: &str) -> Result<ImportedCapture, String> {
                 other => return Err(json_err("transfer", i, format!("{other:?} is not out, in or error"))),
             };
             let bytes = hex(&t.data).map_err(|e| json_err("transfer", i, e))?;
-            Ok(TransferRow { at, direction, bytes, error: t.error })
+            Ok(TransferRow { at, wall_ms: t.unix_ms, direction, bytes, error: t.error })
         })
         .collect::<Result<_, String>>()?;
     Ok(ImportedCapture { signals, transfers })
@@ -149,6 +156,14 @@ fn csv_time(line: usize, text: &str) -> Result<Duration, String> {
     text.parse::<f64>().ok().and_then(seconds).ok_or_else(|| format!("line {line}: {text:?} is not a time"))
 }
 
+/// Unix milliseconds; empty means unknown.
+fn csv_wall(line: usize, text: &str) -> Result<Option<u64>, String> {
+    if text.is_empty() {
+        return Ok(None);
+    }
+    text.parse().map(Some).map_err(|_| format!("line {line}: {text:?} is not a Unix time in milliseconds"))
+}
+
 fn columns(line: usize, fields: &[String], count: usize) -> Result<&[String], String> {
     if fields.len() == count { Ok(fields) } else { Err(format!("line {line}: expected {count} fields")) }
 }
@@ -157,14 +172,16 @@ fn signals_from_csv(records: &[(usize, Vec<String>)]) -> Result<ImportedCapture,
     let signals = records
         .iter()
         .map(|(line, fields)| {
-            let f = columns(*line, fields, 5)?;
-            let complete = match f[1].as_str() {
+            let f = columns(*line, fields, 7)?;
+            let wall_ms = csv_wall(*line, &f[1])?;
+            let complete = match f[2].as_str() {
                 "complete" => true,
                 "short" => false,
                 other => return Err(format!("line {line}: {other:?} is not complete or short")),
             };
-            let data = hex(&f[4]).map_err(|e| format!("line {line}: {e}"))?;
-            Ok(SignalRow::from_learned(csv_time(*line, &f[0])?, complete, data))
+            let data = hex(&f[6]).map_err(|e| format!("line {line}: {e}"))?;
+            let announced = f[4].parse().map_err(|_| format!("line {line}: {:?} is not a length", f[4]))?;
+            Ok(SignalRow::from_learned(csv_time(*line, &f[0])?, wall_ms, complete, announced, data))
         })
         .collect::<Result<_, String>>()?;
     Ok(ImportedCapture { signals, transfers: Vec::new() })
@@ -174,15 +191,16 @@ fn transfers_from_csv(records: &[(usize, Vec<String>)]) -> Result<ImportedCaptur
     let transfers = records
         .iter()
         .map(|(line, fields)| {
-            let f = columns(*line, fields, 4)?;
+            let f = columns(*line, fields, 5)?;
             let at = csv_time(*line, &f[0])?;
-            let (direction, bytes, error) = match f[1].as_str() {
-                "OUT" => (Direction::Out, hex(&f[3]).map_err(|e| format!("line {line}: {e}"))?, None),
-                "IN" => (Direction::In, hex(&f[3]).map_err(|e| format!("line {line}: {e}"))?, None),
-                "ERR" => (Direction::Error, Vec::new(), Some(f[3].clone())),
+            let wall_ms = csv_wall(*line, &f[1])?;
+            let (direction, bytes, error) = match f[2].as_str() {
+                "OUT" => (Direction::Out, hex(&f[4]).map_err(|e| format!("line {line}: {e}"))?, None),
+                "IN" => (Direction::In, hex(&f[4]).map_err(|e| format!("line {line}: {e}"))?, None),
+                "ERR" => (Direction::Error, Vec::new(), Some(f[4].clone())),
                 other => return Err(format!("line {line}: {other:?} is not OUT, IN or ERR")),
             };
-            Ok(TransferRow { at, direction, bytes, error })
+            Ok(TransferRow { at, wall_ms, direction, bytes, error })
         })
         .collect::<Result<_, String>>()?;
     Ok(ImportedCapture { signals: Vec::new(), transfers })
@@ -240,7 +258,7 @@ mod tests {
     #[test]
     fn bin_is_one_learned_code() {
         let imported = import_capture(&[0x23, 0x37], Path::new("dump.BIN")).unwrap();
-        assert_eq!(imported.signals, vec![SignalRow::from_learned(Duration::ZERO, true, vec![0x23, 0x37])]);
+        assert_eq!(imported.signals, vec![SignalRow::from_learned(Duration::ZERO, None, true, 2, vec![0x23, 0x37])]);
         assert!(imported.transfers.is_empty());
         assert_eq!(import_capture(&[], Path::new("e.bin")), Err("the file is empty".into()));
     }
@@ -252,11 +270,11 @@ mod tests {
             Err("not a capture exported by this app (JSON, CSV or .bin)".into())
         );
         assert!(import_capture(b"{\"signals\": 3}", Path::new("x.json")).unwrap_err().starts_with("JSON:"));
-        let bad_csv = "time,direction,length,data\r\nsoon,IN,1,AB\r\n";
+        let bad_csv = "time,unix_ms,direction,length,data\r\nsoon,,IN,1,AB\r\n";
         assert_eq!(import_capture(bad_csv.as_bytes(), Path::new("x.csv")), Err("line 2: \"soon\" is not a time".into()));
-        let bad_dir = "time,direction,length,data\r\n1.000,UP,1,AB\r\n";
+        let bad_dir = "time,unix_ms,direction,length,data\r\n1.000,,UP,1,AB\r\n";
         assert_eq!(import_capture(bad_dir.as_bytes(), Path::new("x.csv")), Err("line 2: \"UP\" is not OUT, IN or ERR".into()));
-        let bad_hex = "time,status,length,summary,data\r\n1.000,complete,1,x,ZZ\r\n";
+        let bad_hex = "time,unix_ms,status,length,announced,summary,data\r\n1.000,,complete,1,1,x,ZZ\r\n";
         assert!(import_capture(bad_hex.as_bytes(), Path::new("x.csv")).unwrap_err().starts_with("line 2:"));
     }
 

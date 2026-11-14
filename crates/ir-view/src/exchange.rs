@@ -266,7 +266,9 @@ mod tests {
     fn signals_are_named_like_saved_signals() {
         let row = SignalRow {
             at: Duration::ZERO,
+            wall_ms: None,
             complete: true,
+            announced_len: 216,
             data: fixture_data(),
             pulses: decode_learned(&fixture_data()).ok(),
             summary: "NEC addr 0x00 cmd 0x59, NEC repeat x5".into(),

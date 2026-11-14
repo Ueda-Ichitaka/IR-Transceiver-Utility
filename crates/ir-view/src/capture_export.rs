@@ -3,7 +3,8 @@
 //! bytes received from the dongle.
 //!
 //! Exists so the export layouts are defined and tested in one place. Bytes
-//! are written as uppercase spaced hex, times as seconds since connecting.
+//! are written as uppercase spaced hex, times as seconds since connecting
+//! plus wall-clock Unix milliseconds where known.
 //! CSV follows RFC 4180 (CRLF line ends, quoted fields where needed).
 
 use serde::Serialize;
@@ -27,7 +28,9 @@ struct JsonLog {
 #[derive(Serialize)]
 struct JsonSignal {
     time_s: f64,
+    unix_ms: Option<u64>,
     complete: bool,
+    announced_len: usize,
     summary: String,
     data: String,
     pulses: Option<Vec<[u32; 2]>>,
@@ -36,6 +39,7 @@ struct JsonSignal {
 #[derive(Serialize)]
 struct JsonTransfer {
     time_s: f64,
+    unix_ms: Option<u64>,
     direction: &'static str,
     data: String,
     error: Option<String>,
@@ -50,6 +54,11 @@ fn field(text: &str) -> String {
     if text.contains([',', '"', '\r', '\n']) { format!("\"{}\"", text.replace('"', "\"\"")) } else { text.to_string() }
 }
 
+/// Unix milliseconds, empty when unknown.
+fn wall_text(wall_ms: Option<u64>) -> String {
+    wall_ms.map_or_else(String::new, |ms| ms.to_string())
+}
+
 fn csv_line(fields: &[&str]) -> String {
     let fields: Vec<String> = fields.iter().map(|f| field(f)).collect();
     format!("{}\r\n", fields.join(","))
@@ -61,7 +70,9 @@ pub fn to_json(log: &CaptureLog) -> String {
         .filter_map(|i| log.signal(i))
         .map(|r| JsonSignal {
             time_s: r.at.as_secs_f64(),
+            unix_ms: r.wall_ms,
             complete: r.complete,
+            announced_len: r.announced_len,
             summary: r.summary.clone(),
             data: hex(&r.data),
             pulses: r.pulses.as_ref().map(|p| p.iter().map(|p| [p.on_us, p.off_us]).collect()),
@@ -70,6 +81,7 @@ pub fn to_json(log: &CaptureLog) -> String {
     let transfers = transfers(log)
         .map(|r| JsonTransfer {
             time_s: r.at.as_secs_f64(),
+            unix_ms: r.wall_ms,
             direction: match r.direction {
                 Direction::Out => "out",
                 Direction::In => "in",
@@ -82,20 +94,22 @@ pub fn to_json(log: &CaptureLog) -> String {
     serde_json::to_string_pretty(&JsonLog { signals, transfers }).expect("capture log is always serializable")
 }
 
-/// The Signals tab as CSV: `time,status,length,summary,data`.
+/// The Signals tab as CSV: `time,unix_ms,status,length,announced,summary,data`.
 pub fn signals_csv(log: &CaptureLog) -> String {
-    let mut out = csv_line(&["time", "status", "length", "summary", "data"]);
+    let mut out = csv_line(&["time", "unix_ms", "status", "length", "announced", "summary", "data"]);
     for r in (0..log.signal_count()).filter_map(|i| log.signal(i)) {
         let status = if r.complete { "complete" } else { "short" };
-        out.push_str(&csv_line(&[&format_time(r.at), status, &r.data.len().to_string(), &r.summary, &hex(&r.data)]));
+        let wall = wall_text(r.wall_ms);
+        let (length, announced) = (r.data.len().to_string(), r.announced_len.to_string());
+        out.push_str(&csv_line(&[&format_time(r.at), &wall, status, &length, &announced, &r.summary, &hex(&r.data)]));
     }
     out
 }
 
-/// The Transfers tab as CSV: `time,direction,length,data` (the error text
+/// The Transfers tab as CSV: `time,unix_ms,direction,length,data` (the error text
 /// in `data` for failed transfers).
 pub fn transfers_csv(log: &CaptureLog) -> String {
-    let mut out = csv_line(&["time", "direction", "length", "data"]);
+    let mut out = csv_line(&["time", "unix_ms", "direction", "length", "data"]);
     for r in transfers(log) {
         let direction = match r.direction {
             Direction::Out => "OUT",
@@ -103,7 +117,8 @@ pub fn transfers_csv(log: &CaptureLog) -> String {
             Direction::Error => "ERR",
         };
         let data = r.error.clone().unwrap_or_else(|| hex(&r.bytes));
-        out.push_str(&csv_line(&[&format_time(r.at), direction, &r.bytes.len().to_string(), &data]));
+        let wall = wall_text(r.wall_ms);
+        out.push_str(&csv_line(&[&format_time(r.at), &wall, direction, &r.bytes.len().to_string(), &data]));
     }
     out
 }
@@ -124,7 +139,7 @@ mod tests {
     use std::time::Duration;
 
     fn transfer(ms: u64, event: recorder::Event) -> Event {
-        Event::Transfer(Entry { wall_ms: 0, at: Duration::from_millis(ms), event })
+        Event::Transfer(Entry { wall_ms: 1_700_000_000_000 + ms, at: Duration::from_millis(ms), event })
     }
 
     fn sample() -> CaptureLog {
@@ -145,16 +160,18 @@ mod tests {
             serde_json::json!({
                 "signals": [{
                     "time_s": 1.234,
+                    "unix_ms": 1_700_000_001_234u64,
                     "complete": true,
+                    "announced_len": 2,
                     "summary": "unknown",
                     "data": "23 37",
                     "pulses": [[560, 880]]
                 }],
                 "transfers": [
-                    { "time_s": 0.01, "direction": "out", "data": "FE FE FE FE", "error": null },
-                    { "time_s": 1.234, "direction": "in", "data": "FE FE FE FE 00 02 23 37", "error": null },
-                    { "time_s": 2.0, "direction": "in", "data": "AB", "error": null },
-                    { "time_s": 2.5, "direction": "error", "data": "", "error": TransportError::Usb("pipe, \"stalled\"".into()).to_string() }
+                    { "time_s": 0.01, "unix_ms": 1_700_000_000_010u64, "direction": "out", "data": "FE FE FE FE", "error": null },
+                    { "time_s": 1.234, "unix_ms": 1_700_000_001_234u64, "direction": "in", "data": "FE FE FE FE 00 02 23 37", "error": null },
+                    { "time_s": 2.0, "unix_ms": 1_700_000_002_000u64, "direction": "in", "data": "AB", "error": null },
+                    { "time_s": 2.5, "unix_ms": 1_700_000_002_500u64, "direction": "error", "data": "", "error": TransportError::Usb("pipe, \"stalled\"".into()).to_string() }
                 ]
             })
         );
@@ -168,7 +185,7 @@ mod tests {
 
     #[test]
     fn signals_csv_layout() {
-        assert_eq!(signals_csv(&sample()), "time,status,length,summary,data\r\n1.234,complete,2,unknown,23 37\r\n");
+        assert_eq!(signals_csv(&sample()), "time,unix_ms,status,length,announced,summary,data\r\n1.234,1700000001234,complete,2,2,unknown,23 37\r\n");
     }
 
     #[test]
@@ -177,7 +194,7 @@ mod tests {
         assert_eq!(
             transfers_csv(&sample()),
             format!(
-                "time,direction,length,data\r\n0.010,OUT,4,FE FE FE FE\r\n1.234,IN,8,FE FE FE FE 00 02 23 37\r\n2.000,IN,1,AB\r\n2.500,ERR,0,\"{error}\"\r\n"
+                "time,unix_ms,direction,length,data\r\n0.010,1700000000010,OUT,4,FE FE FE FE\r\n1.234,1700000001234,IN,8,FE FE FE FE 00 02 23 37\r\n2.000,1700000002000,IN,1,AB\r\n2.500,1700000002500,ERR,0,\"{error}\"\r\n"
             )
         );
     }

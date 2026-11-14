@@ -30,7 +30,10 @@ pub enum Direction {
 /// One USB transfer (or transfer error).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransferRow {
+    /// Offset from connecting.
     pub at: Duration,
+    /// Wall-clock time in Unix milliseconds, when known.
+    pub wall_ms: Option<u64>,
     pub direction: Direction,
     pub bytes: Vec<u8>,
     /// Description for `Direction::Error`.
@@ -42,8 +45,12 @@ pub struct TransferRow {
 pub struct SignalRow {
     /// Time of the last transfer that belongs to the code.
     pub at: Duration,
+    /// Wall-clock time in Unix milliseconds, when known.
+    pub wall_ms: Option<u64>,
     /// False when the reply stopped before the announced length.
     pub complete: bool,
+    /// Length announced by the dongle (equals the data length when complete).
+    pub announced_len: usize,
     pub data: Vec<u8>,
     /// `None` when the data does not decode into pulses.
     pub pulses: Option<Vec<Pulse>>,
@@ -96,6 +103,7 @@ pub struct CaptureLog {
     signals: Vec<u64>,
     transfers: Vec<u64>,
     last_at: Duration,
+    last_wall_ms: Option<u64>,
     full: bool,
 }
 
@@ -107,6 +115,7 @@ impl CaptureLog {
             signals: Vec::new(),
             transfers: Vec::new(),
             last_at: Duration::ZERO,
+            last_wall_ms: None,
             full: false,
         }
     }
@@ -115,9 +124,10 @@ impl CaptureLog {
         let item = match event {
             Event::Transfer(entry) => {
                 self.last_at = entry.at;
+                self.last_wall_ms = Some(entry.wall_ms);
                 Item::Transfer(transfer_row(entry))
             }
-            Event::Learned(outcome) => match signal_row(outcome, self.last_at) {
+            Event::Learned(outcome) => match signal_row(outcome, self.last_at, self.last_wall_ms) {
                 Some(row) => Item::Signal(row),
                 None => return Applied::default(),
             },
@@ -219,25 +229,25 @@ fn transfer_row(entry: &recorder::Entry) -> TransferRow {
         recorder::Event::In(b) => (Direction::In, b.clone(), None),
         recorder::Event::Error(e) => (Direction::Error, Vec::new(), Some(e.to_string())),
     };
-    TransferRow { at: entry.at, direction, bytes, error }
+    TransferRow { at: entry.at, wall_ms: Some(entry.wall_ms), direction, bytes, error }
 }
 
 impl SignalRow {
     /// A row for learned `data`, decoded and described.
-    pub fn from_learned(at: Duration, complete: bool, data: Vec<u8>) -> Self {
+    pub fn from_learned(at: Duration, wall_ms: Option<u64>, complete: bool, announced_len: usize, data: Vec<u8>) -> Self {
         let pulses = decode_learned(&data).ok();
         let summary = pulses.as_deref().map_or_else(|| UNDECODABLE.to_string(), describe_pulses);
-        SignalRow { at, complete, data, pulses, summary }
+        SignalRow { at, wall_ms, complete, announced_len, data, pulses, summary }
     }
 }
 
-fn signal_row(outcome: &LearnOutcome, at: Duration) -> Option<SignalRow> {
+fn signal_row(outcome: &LearnOutcome, at: Duration, wall_ms: Option<u64>) -> Option<SignalRow> {
     let (code, complete) = match outcome {
         LearnOutcome::Complete(code) => (code, true),
         LearnOutcome::Short(code) => (code, false),
         LearnOutcome::NothingReceived => return None,
     };
-    Some(SignalRow::from_learned(at, complete, code.data.clone()))
+    Some(SignalRow::from_learned(at, wall_ms, complete, code.announced_len, code.data.clone()))
 }
 
 /// Seconds with milliseconds, e.g. `12.034`.
@@ -337,6 +347,17 @@ mod tests {
     }
 
     #[test]
+    fn signals_take_the_wall_time_of_their_last_transfer() {
+        let mut log = CaptureLog::new(1 << 20);
+        let entry = Entry { wall_ms: 1_700_000_000_500, at: Duration::from_millis(500), event: recorder::Event::In(vec![1]) };
+        log.apply(&Event::Transfer(entry));
+        log.apply(&learned(vec![0x23, 0x37]));
+        assert_eq!(log.transfer(0).unwrap().wall_ms, Some(1_700_000_000_500));
+        assert_eq!(log.signal(0).unwrap().wall_ms, Some(1_700_000_000_500));
+        assert_eq!(log.signal(0).unwrap().announced_len, 2);
+    }
+
+    #[test]
     fn short_and_undecodable_codes() {
         let mut log = CaptureLog::new(1 << 20);
         log.apply(&Event::Learned(LearnOutcome::Short(LearnedCode { announced_len: 10, data: vec![0x23, 0xFF] })));
@@ -389,8 +410,8 @@ mod tests {
 
     #[test]
     fn signal_rows_from_learned_data() {
-        let row = SignalRow::from_learned(Duration::from_millis(5), false, fixture_data());
-        assert_eq!((row.at, row.complete), (Duration::from_millis(5), false));
+        let row = SignalRow::from_learned(Duration::from_millis(5), Some(7), false, 300, fixture_data());
+        assert_eq!((row.at, row.wall_ms, row.complete, row.announced_len), (Duration::from_millis(5), Some(7), false, 300));
         assert_eq!(row.summary, "NEC addr 0x00 cmd 0x59, NEC repeat x5");
         assert!(row.pulses.is_some());
     }
@@ -399,8 +420,8 @@ mod tests {
     fn import_appends_rows_within_the_limit() {
         let mut log = CaptureLog::new(1 << 20);
         log.apply(&transfer(1, recorder::Event::Out(vec![1])));
-        let t = TransferRow { at: Duration::from_millis(2), direction: Direction::In, bytes: vec![2], error: None };
-        let s = SignalRow::from_learned(Duration::from_millis(3), true, vec![0x23, 0x37]);
+        let t = TransferRow { at: Duration::from_millis(2), wall_ms: None, direction: Direction::In, bytes: vec![2], error: None };
+        let s = SignalRow::from_learned(Duration::from_millis(3), None, true, 2, vec![0x23, 0x37]);
         assert_eq!(log.import(vec![s.clone()], vec![t.clone()]), 2);
         assert_eq!(log.transfer_count(), 2);
         assert_eq!(log.transfer(1), Some(&t));
@@ -456,7 +477,9 @@ mod tests {
     fn data_columns() {
         let row = SignalRow {
             at: Duration::ZERO,
+            wall_ms: None,
             complete: true,
+            announced_len: 2,
             data: vec![0x0A, 0xFF],
             pulses: Some(vec![Pulse { on_us: 160, off_us: 4080 }]),
             summary: String::new(),
@@ -467,7 +490,7 @@ mod tests {
         let undecodable = SignalRow { pulses: None, ..row };
         assert_eq!(signal_data_text(&undecodable, Shown::Pulses, &OPTS), "cannot be decoded");
 
-        let out = TransferRow { at: Duration::ZERO, direction: Direction::Out, bytes: vec![0xFC, 0xFC], error: None };
+        let out = TransferRow { at: Duration::ZERO, wall_ms: None, direction: Direction::Out, bytes: vec![0xFC, 0xFC], error: None };
         assert_eq!(transfer_data_text(&out, Encoding::Hex, &OPTS), "FC FC");
         let err = TransferRow { direction: Direction::Error, bytes: vec![], error: Some("gone".into()), ..out };
         assert_eq!(transfer_data_text(&err, Encoding::Hex, &OPTS), "gone");
