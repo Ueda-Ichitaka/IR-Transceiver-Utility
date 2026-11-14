@@ -18,6 +18,7 @@ members = [
     "crates/ir-session",
     "crates/ir-settings",
     "crates/ir-transport",
+    "crates/ir-view",
 ]
 
 [workspace.package]
@@ -33,6 +34,7 @@ nusb = "0.2.9"
 base64 = "0.23.1"
 ir-codec = { path = "crates/ir-codec" }
 ir-transport = { path = "crates/ir-transport" }
+ir-session = { path = "crates/ir-session" }
 ir-library = { path = "crates/ir-library" }
 
 # cmake-package passes header-only CMake targets such as Qt6::QmlIntegration

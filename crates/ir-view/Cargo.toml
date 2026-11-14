@@ -1,0 +1,18 @@
+# ir-view - Qt-free view models of the IR Transceiver Utility GUI.
+#
+# Holds everything the pages show and decide (device status and enabled
+# actions, the capture log with its signal and transfer tabs, text formatting)
+# as plain Rust, so it is unit tested without Qt. The cxx-qt objects in ir-app
+# only forward to these types.
+[package]
+name = "ir-view"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+elk-proto.workspace = true
+ir-codec.workspace = true
+ir-session.workspace = true
+ir-transport.workspace = true
