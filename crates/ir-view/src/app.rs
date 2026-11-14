@@ -157,7 +157,7 @@ mod tests {
     fn batch_updates_status_and_counts_rows() {
         let mut core = AppCore::new(Settings::default());
         let update = core.apply(&[
-            Event::Connected { device: "dongle".into(), protocol: Protocol::Plain },
+            Event::Connected { device: ir_session::session::DeviceInfo::named("dongle"), protocol: Protocol::Plain },
             Event::State(State::Ready),
             chunk(),
             chunk(),

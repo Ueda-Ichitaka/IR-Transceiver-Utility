@@ -66,6 +66,9 @@ pub struct UsbTransport {
     _interface: nusb::Interface,
     pub summary: DeviceSummary,
     pub endpoints: Endpoints,
+    /// Class and subclass of interface 0.
+    pub interface_class: u8,
+    pub interface_subclass: u8,
 }
 
 fn usb_err(e: nusb::Error) -> OpenError {
@@ -96,6 +99,11 @@ pub fn list() -> Result<Vec<DeviceSummary>, OpenError> {
 }
 
 impl UsbTransport {
+    /// Maximum packet size of the IN endpoint.
+    pub fn packet_size(&self) -> usize {
+        self.in_packet_size
+    }
+
     /// Opens the first supported dongle found.
     pub fn open() -> Result<Self, OpenError> {
         Self::open_where(|_| true)
@@ -124,11 +132,21 @@ impl UsbTransport {
             })
             .collect();
         let endpoints = endpoints::select(desc.class(), &eps).map_err(OpenError::Descriptor)?;
+        let (interface_class, interface_subclass) = (desc.class(), desc.subclass());
 
         let out_ep = interface.endpoint::<Bulk, Out>(endpoints.out_addr).map_err(usb_err)?;
         let in_ep = interface.endpoint::<Bulk, In>(endpoints.in_addr).map_err(usb_err)?;
         let in_packet_size = in_ep.max_packet_size();
-        Ok(Self { out_ep, in_ep, in_packet_size, _interface: interface, summary, endpoints })
+        Ok(Self {
+            out_ep,
+            in_ep,
+            in_packet_size,
+            _interface: interface,
+            summary,
+            endpoints,
+            interface_class,
+            interface_subclass,
+        })
     }
 }
 

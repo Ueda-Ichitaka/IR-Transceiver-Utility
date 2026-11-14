@@ -21,8 +21,26 @@ use ir_transport::transport::{Transport, TransportError};
 /// Opens the dongle. Implemented for USB and for tests.
 pub trait Connector {
     type Transport: Transport;
-    /// Returns the transport and a one-line description of the device.
-    fn connect(&mut self) -> Result<(Self::Transport, String), String>;
+    /// Returns the transport and what to show about the device.
+    fn connect(&mut self) -> Result<(Self::Transport, DeviceInfo), String>;
+}
+
+/// What the GUI shows about a connected dongle.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DeviceInfo {
+    /// One line, e.g. `Smart IR Blaster (045c:0132, bus 003, address 14)`.
+    pub description: String,
+    /// Short form for the sidebar, e.g. `045c:0132 · bus 003 dev 014`.
+    pub location: String,
+    /// Labelled details for the device page.
+    pub facts: Vec<(String, String)>,
+}
+
+impl DeviceInfo {
+    /// Only a description (tests and devices without details).
+    pub fn named(description: &str) -> Self {
+        Self { description: description.to_string(), ..Self::default() }
+    }
 }
 
 /// Requests from the GUI.
@@ -30,6 +48,8 @@ pub trait Connector {
 pub enum Command {
     Connect,
     Disconnect,
+    /// Asks the dongle for its protocol again (only while ready).
+    Identify,
     /// Learn one code, waiting up to `wait_s` seconds for a button press.
     LearnOnce { wait_s: u32 },
     /// Learn codes continuously until `StopCapture`.
@@ -57,7 +77,7 @@ pub enum State {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     State(State),
-    Connected { device: String, protocol: Protocol },
+    Connected { device: DeviceInfo, protocol: Protocol },
     /// One USB transfer (or transfer error) with its time offset.
     Transfer(Entry),
     /// A learn finished (also every code during capture).
@@ -83,7 +103,7 @@ enum LearnMode {
 pub struct Session<C: Connector> {
     connector: C,
     transport: Option<Recorder<C::Transport>>,
-    device: String,
+    device: DeviceInfo,
     protocol: Option<Protocol>,
     state: State,
     learner: Option<(Learner, LearnMode)>,
@@ -103,7 +123,7 @@ impl<C: Connector> Session<C> {
         Self {
             connector,
             transport: None,
-            device: String::new(),
+            device: DeviceInfo::default(),
             protocol: None,
             state: State::Disconnected,
             learner: None,
@@ -132,6 +152,7 @@ impl<C: Connector> Session<C> {
                 self.drop_device();
                 self.set_state(State::Disconnected);
             }
+            (Command::Identify, State::Ready) => self.identify(),
             (Command::LearnOnce { wait_s }, State::Ready) => {
                 let wait_reads = wait_s.saturating_mul(READS_PER_SECOND).max(1);
                 self.start_learner(LearnConfig { wait_reads, gap_reads: GAP_READS }, LearnMode::Once);
@@ -346,6 +367,7 @@ fn name(command: &Command) -> &'static str {
     match command {
         Command::Connect => "Connect",
         Command::Disconnect => "Disconnect",
+        Command::Identify => "Identify",
         Command::LearnOnce { .. } => "Learn",
         Command::StartCapture => "Start capture",
         Command::StopCapture => "Stop capture",
@@ -369,9 +391,9 @@ mod tests {
 
     impl Connector for ScriptConnector {
         type Transport = MockTransport;
-        fn connect(&mut self) -> Result<(MockTransport, String), String> {
+        fn connect(&mut self) -> Result<(MockTransport, DeviceInfo), String> {
             let script = self.0.pop_front().expect("unexpected connect")?;
-            Ok((MockTransport::new(script), "test dongle".into()))
+            Ok((MockTransport::new(script), DeviceInfo::named("test dongle")))
         }
     }
 
@@ -418,6 +440,29 @@ mod tests {
     }
 
     #[test]
+    fn identify_again_while_ready() {
+        let mut s = connected(identify_steps());
+        s.handle(Command::Identify);
+        assert_eq!(
+            non_io(s.take_events()),
+            vec![
+                Event::Connected { device: DeviceInfo::named("test dongle"), protocol: Protocol::Plain },
+                Event::State(State::Ready),
+            ]
+        );
+        assert_eq!(s.state(), State::Ready);
+    }
+
+    #[test]
+    fn identify_is_refused_while_capturing() {
+        let mut s = connected(vec![w(command::LEARN)]);
+        s.handle(Command::StartCapture);
+        s.take_events();
+        s.handle(Command::Identify);
+        assert_eq!(non_io(s.take_events()), vec![Event::Error("Identify is not possible while Capturing".into())]);
+    }
+
+    #[test]
     fn starts_disconnected() {
         let s = session(vec![]);
         assert_eq!(s.state(), State::Disconnected);
@@ -432,7 +477,7 @@ mod tests {
         assert_eq!(
             non_io(events.clone()),
             vec![
-                Event::Connected { device: "test dongle".into(), protocol: Protocol::Plain },
+                Event::Connected { device: DeviceInfo::named("test dongle"), protocol: Protocol::Plain },
                 Event::State(State::Ready),
             ]
         );
@@ -593,7 +638,7 @@ mod tests {
         assert_eq!(
             non_io(s.take_events()),
             vec![
-                Event::Connected { device: "test dongle".into(), protocol: Protocol::Plain },
+                Event::Connected { device: DeviceInfo::named("test dongle"), protocol: Protocol::Plain },
                 Event::State(State::Ready),
             ]
         );

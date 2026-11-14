@@ -77,7 +77,7 @@ fn run<C: Connector>(mut session: Session<C>, rx: Receiver<Command>, mut sink: i
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::State;
+    use crate::session::{DeviceInfo, State};
     use elk_proto::command;
     use ir_transport::mock::{MockTransport, Step};
     use std::time::Duration;
@@ -86,8 +86,8 @@ mod tests {
 
     impl Connector for OneShot {
         type Transport = MockTransport;
-        fn connect(&mut self) -> Result<(MockTransport, String), String> {
-            Ok((MockTransport::new(self.0.take().ok_or("no script")?), "test".into()))
+        fn connect(&mut self) -> Result<(MockTransport, DeviceInfo), String> {
+            Ok((MockTransport::new(self.0.take().ok_or("no script")?), DeviceInfo::named("test")))
         }
     }
 

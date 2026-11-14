@@ -1,12 +1,14 @@
 //! Connection status shown in the sidebar and on the device page.
 //!
 //! Exists to derive, from session events alone, what the user sees (state,
-//! device line, dongle protocol, last error, the last transmit, the "waiting
-//! for an IR signal" banner of design decision 14) and which actions are
-//! enabled.
+//! device line, location and facts, dongle protocol and identify reply, when
+//! it was connected and how many errors occurred since, last error, the last
+//! transmit, the "waiting for an IR signal" banner of design decision 14)
+//! and which actions are enabled.
 
 use elk_proto::identify::Protocol;
-use ir_session::session::{Event, State};
+use ir_session::session::{DeviceInfo, Event, State};
+use ir_transport::recorder;
 
 /// Banner text while the dongle waits for an IR signal.
 pub const RECOVERING_BANNER: &str =
@@ -16,15 +18,30 @@ pub const RECOVERING_BANNER: &str =
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceView {
     state: State,
-    device: Option<String>,
+    device: Option<DeviceInfo>,
     protocol: Option<Protocol>,
+    identify_reply: Option<Vec<u8>>,
+    connected_since_ms: Option<u64>,
+    errors: usize,
     last_error: Option<String>,
     last_sent: Option<String>,
+    /// Wall time of the latest transfer (not shown itself).
+    last_transfer_ms: Option<u64>,
 }
 
 impl Default for DeviceView {
     fn default() -> Self {
-        Self { state: State::Disconnected, device: None, protocol: None, last_error: None, last_sent: None }
+        Self {
+            state: State::Disconnected,
+            device: None,
+            protocol: None,
+            identify_reply: None,
+            connected_since_ms: None,
+            errors: 0,
+            last_error: None,
+            last_sent: None,
+            last_transfer_ms: None,
+        }
     }
 }
 
@@ -38,19 +55,39 @@ impl DeviceView {
                 if *state == State::Disconnected {
                     self.device = None;
                     self.protocol = None;
+                    self.identify_reply = None;
+                    self.connected_since_ms = None;
+                    self.errors = 0;
                     self.last_sent = None;
                 }
             }
             Event::Connected { device, protocol } => {
+                if self.device.is_none() {
+                    self.connected_since_ms = self.last_transfer_ms;
+                    self.errors = 0;
+                }
                 self.device = Some(device.clone());
                 self.protocol = Some(*protocol);
             }
-            Event::Error(message) => self.last_error = Some(message.clone()),
+            Event::Transfer(entry) => {
+                self.last_transfer_ms = Some(entry.wall_ms);
+                match &entry.event {
+                    recorder::Event::In(bytes) if bytes.starts_with(&[0xFC; 4]) => {
+                        self.identify_reply = Some(bytes.clone());
+                    }
+                    recorder::Event::Error(_) => self.errors += 1,
+                    _ => {}
+                }
+            }
+            Event::Error(message) => {
+                self.last_error = Some(message.clone());
+                self.errors += 1;
+            }
             Event::Transmitted { pulses } => self.last_sent = Some(format!("Sent {pulses} pulses.")),
             Event::RawSent { bytes } => self.last_sent = Some(format!("Sent {bytes} raw bytes.")),
             _ => {}
         }
-        *self != before
+        Self { last_transfer_ms: before.last_transfer_ms, ..self.clone() } != before
     }
 
     pub fn state(&self) -> State {
@@ -67,8 +104,45 @@ impl DeviceView {
         }
     }
 
+    /// `Connected · plain`: the state and, when known, the protocol.
+    pub fn sidebar_line(&self) -> String {
+        match self.protocol_label() {
+            Some(protocol) => format!("{} · {protocol}", self.state_label()),
+            None => self.state_label().to_string(),
+        }
+    }
+
+    /// Short location for the sidebar.
+    pub fn location(&self) -> Option<&str> {
+        self.device.as_ref().map(|d| d.location.as_str()).filter(|l| !l.is_empty())
+    }
+
+    /// Labelled details for the device page: the connector's facts, the
+    /// protocol and the identify reply.
+    pub fn facts(&self) -> Vec<(String, String)> {
+        let Some(device) = &self.device else { return Vec::new() };
+        let mut facts = device.facts.clone();
+        if let Some(protocol) = self.protocol_label() {
+            facts.push(("Protocol".to_string(), protocol.to_string()));
+        }
+        if let Some(reply) = &self.identify_reply {
+            facts.push(("Identify".to_string(), recorder::hex(reply)));
+        }
+        facts
+    }
+
+    /// When the dongle was connected (wall-clock Unix milliseconds).
+    pub fn connected_since_ms(&self) -> Option<u64> {
+        self.connected_since_ms
+    }
+
+    /// Errors since connecting.
+    pub fn error_count(&self) -> usize {
+        self.errors
+    }
+
     pub fn device(&self) -> Option<&str> {
-        self.device.as_deref()
+        self.device.as_ref().map(|d| d.description.as_str())
     }
 
     pub fn protocol_label(&self) -> Option<&'static str> {
@@ -116,11 +190,60 @@ impl DeviceView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ir_session::session::DeviceInfo;
     use ir_transport::ops::LearnOutcome;
+    use ir_transport::recorder::{self, Entry};
+    use ir_transport::transport::TransportError;
+    use std::time::Duration;
+
+    fn info() -> DeviceInfo {
+        DeviceInfo {
+            description: "Smart IR Blaster (045c:0132)".into(),
+            location: "045c:0132 · bus 003 dev 014".into(),
+            facts: vec![("Device".into(), "045c:0132 Smart IR Blaster".into())],
+        }
+    }
+
+    fn transfer(wall_ms: u64, event: recorder::Event) -> Event {
+        Event::Transfer(Entry { at: Duration::ZERO, wall_ms, event })
+    }
+
+    #[test]
+    fn connection_facts_location_and_sidebar_line() {
+        let mut v = DeviceView::default();
+        assert_eq!(v.sidebar_line(), "Disconnected");
+        v.apply(&transfer(1_000, recorder::Event::Out(vec![0xFC; 4])));
+        v.apply(&transfer(1_005, recorder::Event::In(vec![0xFC, 0xFC, 0xFC, 0xFC, 0x70, 0x01])));
+        v.apply(&Event::Connected { device: info(), protocol: Protocol::Plain });
+        v.apply(&Event::State(State::Ready));
+        assert_eq!(v.sidebar_line(), "Connected · plain");
+        assert_eq!(v.location(), Some("045c:0132 · bus 003 dev 014"));
+        let all = v.facts();
+        let facts: Vec<(&str, &str)> = all.iter().map(|(l, x)| (l.as_str(), x.as_str())).collect();
+        assert_eq!(
+            facts,
+            vec![("Device", "045c:0132 Smart IR Blaster"), ("Protocol", "plain"), ("Identify", "FC FC FC FC 70 01")]
+        );
+        assert_eq!(v.connected_since_ms(), Some(1_005));
+    }
+
+    #[test]
+    fn errors_are_counted_per_connection() {
+        let mut v = connected();
+        v.apply(&Event::Error("a".into()));
+        v.apply(&transfer(5, recorder::Event::Error(TransportError::Timeout)));
+        assert_eq!(v.error_count(), 2);
+        v.apply(&transfer(9, recorder::Event::In(vec![0xFC, 0xFC, 0xFC, 0xFC, 0x70, 0x01])));
+        v.apply(&Event::Connected { device: info(), protocol: Protocol::Plain });
+        assert_eq!(v.error_count(), 2, "identifying again keeps the connection");
+        v.apply(&Event::State(State::Disconnected));
+        assert_eq!((v.error_count(), v.connected_since_ms(), v.location()), (0, None, None));
+        assert!(v.facts().is_empty());
+    }
 
     fn connected() -> DeviceView {
         let mut v = DeviceView::default();
-        v.apply(&Event::Connected { device: "Smart IR Blaster (045c:0132)".into(), protocol: Protocol::Plain });
+        v.apply(&Event::Connected { device: info(), protocol: Protocol::Plain });
         v.apply(&Event::State(State::Ready));
         v
     }
@@ -153,7 +276,7 @@ mod tests {
     #[test]
     fn huffman_protocol_label() {
         let mut v = DeviceView::default();
-        v.apply(&Event::Connected { device: "x".into(), protocol: Protocol::Huffman });
+        v.apply(&Event::Connected { device: DeviceInfo::named("x"), protocol: Protocol::Huffman });
         assert_eq!(v.protocol_label(), Some("Huffman"));
     }
 
