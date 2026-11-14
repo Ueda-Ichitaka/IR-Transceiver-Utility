@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- App icon of the IR Transceiver Utility: a USB dongle sending infrared waves. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect x="6" y="26" width="10" height="12" rx="2" fill="#7f8c8d"/>
+  <rect x="14" y="20" width="24" height="24" rx="5" fill="#2c3e50"/>
+  <circle cx="32" cy="32" r="4" fill="#e74c3c"/>
+  <g fill="none" stroke="#e74c3c" stroke-width="3.5" stroke-linecap="round">
+    <path d="M42 24 a11 11 0 0 1 0 16"/>
+    <path d="M48 18 a19 19 0 0 1 0 28"/>
+    <path d="M54 12 a27 27 0 0 1 0 40"/>
+  </g>
+</svg>

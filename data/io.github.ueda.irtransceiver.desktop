@@ -1,0 +1,11 @@
+# Desktop entry of the IR Transceiver Utility, installed by CMakeLists.txt.
+[Desktop Entry]
+Type=Application
+Name=IR Transceiver
+GenericName=Infrared Remote Tool
+Comment=Learn, capture and send infrared codes with an ELK Smart USB dongle
+Exec=ir-transceiver
+Icon=io.github.ueda.irtransceiver
+Terminal=false
+Categories=Qt;KDE;Utility;
+Keywords=infrared;IR;remote;LIRC;ELK;blaster;

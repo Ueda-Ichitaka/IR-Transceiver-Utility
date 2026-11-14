@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata of the IR Transceiver Utility, installed by CMakeLists.txt. -->
+<component type="desktop-application">
+  <id>io.github.ueda.irtransceiver</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>IR Transceiver</name>
+  <summary>Learn, capture and send infrared codes</summary>
+  <developer id="io.github.ueda">
+    <name>ueda</name>
+  </developer>
+  <description>
+    <p>
+      IR Transceiver controls ELK Smart USB infrared blasters. It learns codes
+      from remote controls, captures everything the dongle receives, shows the
+      data as hex, binary, decimal, Base64 or pulse timings, recognises common
+      remote protocols, keeps codes in a tagged library and sends them again.
+    </p>
+    <ul>
+      <li>Live capture of received signals and of every USB transfer</li>
+      <li>Send learned codes, pulse timings, NEC codes or raw USB bytes</li>
+      <li>Import and export LIRC, Flipper Zero and Pronto codes</li>
+    </ul>
+  </description>
+  <url type="homepage">https://github.com/Ueda-Ichitaka/IR-Transceiver-Utility</url>
+  <url type="bugtracker">https://github.com/Ueda-Ichitaka/IR-Transceiver-Utility/issues</url>
+  <launchable type="desktop-id">io.github.ueda.irtransceiver.desktop</launchable>
+  <provides>
+    <binary>ir-transceiver</binary>
+    <modalias>usb:v045Cp0132d*</modalias>
+    <modalias>usb:v045Cp0195d*</modalias>
+    <modalias>usb:v045Cp0184d*</modalias>
+    <modalias>usb:v045Cp0134d*</modalias>
+  </provides>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-14" type="development"/>
+  </releases>
+</component>
