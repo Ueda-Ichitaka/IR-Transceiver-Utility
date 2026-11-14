@@ -1,7 +1,8 @@
 // CapturePage.qml - live capture with a Signals tab and a Transfers tab.
 //
 // Learn once / Start / Stop / Clear act on the dongle through the
-// DeviceController singleton; Export writes the capture through FileActions. Each tab is a ListView over its own
+// DeviceController singleton; Import loads an exported capture (replacing or
+// appending) and Export writes it, both through FileActions. Each tab is a ListView over its own
 // CaptureModel with its own encoding switch; rows are appended as the
 // session reports them (captureChanged -> sync).
 import QtQuick
@@ -18,6 +19,17 @@ Kirigami.Page {
     padding: 0
 
     readonly property int learnWaitSeconds: 30
+
+    // Loads an exported capture, replacing the current one or appending.
+    function importCapture(url, replace) {
+        if (FileActions.importCapture(url, replace)) {
+            signalModel.reformat();
+            transferModel.reformat();
+            DeviceController.refreshCapture();
+            return true;
+        }
+        return false;
+    }
 
     // Shows the Signals (0) or Transfers (1) tab.
     function showTab(index) {
@@ -42,6 +54,20 @@ Kirigami.Page {
             icon.name: "media-playback-stop"
             enabled: DeviceController.canStopCapture
             onTriggered: DeviceController.stopCapture()
+        },
+        Kirigami.Action {
+            text: i18nc("@action:button", "Import")
+            icon.name: "document-import"
+            enabled: !DeviceController.canStopCapture
+
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "Replace current capture…")
+                onTriggered: importDialog.ask(true)
+            }
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "Append to current capture…")
+                onTriggered: importDialog.ask(false)
+            }
         },
         Kirigami.Action {
             text: i18nc("@action:button", "Export")
@@ -84,6 +110,18 @@ Kirigami.Page {
             signalModel.sync();
             transferModel.sync();
         }
+    }
+
+    Dialogs.FileDialog {
+        id: importDialog
+        property bool replace: true
+        function ask(replace) {
+            importDialog.replace = replace;
+            open();
+        }
+        fileMode: Dialogs.FileDialog.OpenFile
+        nameFilters: [i18nc("@item:inlistbox", "Captures (*.json *.csv *.bin)"), i18nc("@item:inlistbox", "All files (*)")]
+        onAccepted: page.importCapture(selectedFile, replace)
     }
 
     Dialogs.FileDialog {

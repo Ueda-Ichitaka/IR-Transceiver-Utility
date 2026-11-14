@@ -2,7 +2,8 @@
 //!
 //! Exists to do the file work of design decisions 17 and 18: write the
 //! capture or the library in the chosen format, import codes into the
-//! library, and give Pronto hex for one code or signal. The contents come
+//! library, load an exported capture back, and give Pronto hex for one code
+//! or signal. The contents come
 //! from `ir_view::files` and `ir_view::exchange`; the outcome is shown
 //! through `message` and `ok`.
 
@@ -35,6 +36,10 @@ pub mod qobject {
         #[qinvokable]
         fn export_library(self: Pin<&mut FileActions>, url: &QUrl, format: &QString, query: &QString, tag: &QString)
         -> bool;
+        /// Loads an exported capture (JSON, CSV, .bin) into the capture view,
+        /// replacing the current capture or appending to it.
+        #[qinvokable]
+        fn import_capture(self: Pin<&mut FileActions>, url: &QUrl, replace: bool) -> bool;
         /// Adds the codes of a Flipper, LIRC or Pronto file to the library.
         #[qinvokable]
         fn import_library(self: Pin<&mut FileActions>, url: &QUrl) -> bool;
@@ -51,6 +56,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use cxx_qt_lib::{QString, QUrl};
+use ir_view::capture_import::import_capture;
 use ir_view::exchange::{self, add_all, code_item, signal_item};
 use ir_view::files::{self, CaptureFormat, LibraryFormat};
 use ir_view::text::capitalise;
@@ -103,6 +109,23 @@ impl qobject::FileActions {
             })?;
             write(&path, &output.bytes)?;
             Ok(files::export_message(&path, &output.skipped))
+        })();
+        self.report(result)
+    }
+
+    fn import_capture(self: Pin<&mut Self>, url: &QUrl, replace: bool) -> bool {
+        let result = (|| {
+            let path = local_path(url)?;
+            let bytes = std::fs::read(&path).map_err(|e| format!("reading {} failed: {e}", path.display()))?;
+            let imported = import_capture(&bytes, &path)?;
+            let total = imported.signals.len() + imported.transfers.len();
+            let stored = state::with(|s| {
+                if replace {
+                    s.core.capture.clear();
+                }
+                s.core.capture.import(imported.signals, imported.transfers)
+            });
+            Ok(files::capture_import_message(stored, total, &path))
         })();
         self.report(result)
     }

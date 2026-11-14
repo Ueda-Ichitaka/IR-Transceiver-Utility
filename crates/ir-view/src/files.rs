@@ -135,6 +135,16 @@ pub fn import_message(count: usize, path: &Path) -> String {
     format!("Imported {count} {codes} from {}.", path.display())
 }
 
+/// Confirmation after a capture import; names rows left out by the limit.
+pub fn capture_import_message(stored: usize, total: usize, path: &Path) -> String {
+    let rows = if total == 1 { "row" } else { "rows" };
+    if stored < total {
+        format!("Loaded {stored} of {total} {rows} from {}; the capture limit is reached.", path.display())
+    } else {
+        format!("Loaded {stored} {rows} from {}.", path.display())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,6 +178,16 @@ mod tests {
         );
         assert_eq!(import_message(1, Path::new("/x/tv.conf")), "Imported 1 code from /x/tv.conf.");
         assert_eq!(import_message(3, Path::new("/x/tv.conf")), "Imported 3 codes from /x/tv.conf.");
+    }
+
+    #[test]
+    fn capture_import_messages() {
+        assert_eq!(capture_import_message(5, 5, Path::new("/x/c.json")), "Loaded 5 rows from /x/c.json.");
+        assert_eq!(capture_import_message(1, 1, Path::new("/x/c.bin")), "Loaded 1 row from /x/c.bin.");
+        assert_eq!(
+            capture_import_message(3, 5, Path::new("/x/c.json")),
+            "Loaded 3 of 5 rows from /x/c.json; the capture limit is reached."
+        );
     }
 
     #[test]

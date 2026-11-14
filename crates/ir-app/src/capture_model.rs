@@ -76,7 +76,8 @@ pub mod qobject {
         #[qsignal]
         fn display_changed(self: Pin<&mut CaptureModel>);
 
-        /// Re-renders every row (after the display settings changed).
+        /// Re-reads and re-renders every row (after the display settings
+        /// changed or the capture was replaced).
         #[qinvokable]
         fn reformat(self: Pin<&mut CaptureModel>);
 
@@ -185,6 +186,8 @@ impl qobject::CaptureModel {
 
     fn reformat(mut self: Pin<&mut Self>) {
         self.as_mut().begin_reset_model();
+        let rows = Self::log_rows(self.tab);
+        self.as_mut().rust_mut().rows = rows;
         self.as_mut().end_reset_model();
         self.display_changed();
     }

@@ -120,6 +120,7 @@ Kirigami.ApplicationWindow {
         property int next: 0
         property bool replayed: false
         property bool savedToLibrary: false
+        property bool imported: false
         interval: 50
         repeat: true
         onTriggered: {
@@ -141,6 +142,18 @@ Kirigami.ApplicationWindow {
                     savedToLibrary = true;
                     LibraryModel.saveSignal(0);
                     root.showPage(libraryPage);
+                    return;
+                }
+                // Then import the file given by the test, replacing the capture.
+                if (!imported) {
+                    imported = true;
+                    const arg = Qt.application.arguments.find(a => a.startsWith("--smoke-import="));
+                    if (arg) {
+                        root.showPage(capturePage);
+                        capturePage.showTab(0);
+                        capturePage.importCapture("file://" + arg.substring("--smoke-import=".length), true);
+                        console.info("ir-transceiver: imported " + DeviceController.signalCount + " signals");
+                    }
                     return;
                 }
                 stop();

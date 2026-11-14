@@ -4,7 +4,8 @@
 //! registration errors that unit tests cannot see. The app is started on
 //! Qt's offscreen platform with `--smoke-test`; the main window then opens
 //! every page, replays the recorded TV remote fixture into the capture page,
-//! logs a marker per page and per rendered capture row, and quits. A QML
+//! saves a signal to a test library, imports a .bin file replacing the
+//! capture, logs a marker per page and per rendered row, and quits. A QML
 //! warning or error, a missing marker or a hang fails the test. In smoke-test
 //! mode the app does not connect to a dongle.
 
@@ -19,6 +20,13 @@ const QML_PROBLEMS: [&str; 7] =
     ["qrc:/", "qt.qml.", "TypeError", "ReferenceError", "is not a type", "Cannot assign", "is not defined"];
 const TIMEOUT: Duration = Duration::from_secs(60);
 
+/// A two-byte learned code for the capture import step.
+fn import_file() -> std::path::PathBuf {
+    let path = test_dir("import").join("code.bin");
+    std::fs::write(&path, [0x23, 0x37]).unwrap();
+    path
+}
+
 /// An empty directory under target/test-tmp.
 fn test_dir(name: &str) -> std::path::PathBuf {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-tmp/ir-app").join(name);
@@ -31,6 +39,7 @@ fn test_dir(name: &str) -> std::path::PathBuf {
 fn main_window_loads_offscreen() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_ir-transceiver"))
         .arg("--smoke-test")
+        .arg(format!("--smoke-import={}", import_file().display()))
         .env("QT_QPA_PLATFORM", "offscreen")
         // Qt logs to the systemd journal when stderr is not a terminal.
         .env("QT_FORCE_STDERR_LOGGING", "1")
@@ -65,6 +74,8 @@ fn main_window_loads_offscreen() {
         "ir-transceiver: row complete | NEC addr 0x00 cmd 0x59, NEC repeat x5 | FF FF 37 FF",
         "ir-transceiver: row OUT |  | FC FC FC FC",
         "ir-transceiver: code NEC addr 0x00 cmd 0x59 | NEC addr 0x00 cmd 0x59, NEC repeat x5 · default carrier · 216 B",
+        "ir-transceiver: row complete | unknown | 23 37",
+        "ir-transceiver: imported 1 signals",
     ] {
         assert!(stderr.contains(row), "{row:?} missing, stderr:\n{stderr}");
     }

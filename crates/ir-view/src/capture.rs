@@ -175,6 +175,27 @@ impl CaptureLog {
         }
     }
 
+    /// Appends imported rows within the limit; returns how many were stored.
+    /// Stops at the first row that does not fit and marks the log full.
+    pub fn import(&mut self, signals: Vec<SignalRow>, transfers: Vec<TransferRow>) -> usize {
+        let items = signals.into_iter().map(Item::Signal).chain(transfers.into_iter().map(Item::Transfer));
+        let mut stored = 0;
+        for item in items {
+            if self.full {
+                break;
+            }
+            let is_signal = matches!(item, Item::Signal(_));
+            match self.items.push(item) {
+                Pushed::Stored { seq, .. } => {
+                    if is_signal { self.signals.push(seq) } else { self.transfers.push(seq) }
+                    stored += 1;
+                }
+                Pushed::Rejected => self.full = true,
+            }
+        }
+        stored
+    }
+
     /// True once the limit was reached; cleared by `clear`.
     pub fn is_full(&self) -> bool {
         self.full
@@ -201,15 +222,22 @@ fn transfer_row(entry: &recorder::Entry) -> TransferRow {
     TransferRow { at: entry.at, direction, bytes, error }
 }
 
+impl SignalRow {
+    /// A row for learned `data`, decoded and described.
+    pub fn from_learned(at: Duration, complete: bool, data: Vec<u8>) -> Self {
+        let pulses = decode_learned(&data).ok();
+        let summary = pulses.as_deref().map_or_else(|| UNDECODABLE.to_string(), describe_pulses);
+        SignalRow { at, complete, data, pulses, summary }
+    }
+}
+
 fn signal_row(outcome: &LearnOutcome, at: Duration) -> Option<SignalRow> {
     let (code, complete) = match outcome {
         LearnOutcome::Complete(code) => (code, true),
         LearnOutcome::Short(code) => (code, false),
         LearnOutcome::NothingReceived => return None,
     };
-    let pulses = decode_learned(&code.data).ok();
-    let summary = pulses.as_deref().map_or_else(|| UNDECODABLE.to_string(), describe_pulses);
-    Some(SignalRow { at, complete, data: code.data.clone(), pulses, summary })
+    Some(SignalRow::from_learned(at, complete, code.data.clone()))
 }
 
 /// Seconds with milliseconds, e.g. `12.034`.
@@ -357,6 +385,30 @@ mod tests {
         log.set_limit(1);
         assert_eq!(log.transfer_count(), 2, "rows are kept");
         assert!(log.apply(&transfer(0, recorder::Event::Out(vec![0xFC; 4]))).became_full);
+    }
+
+    #[test]
+    fn signal_rows_from_learned_data() {
+        let row = SignalRow::from_learned(Duration::from_millis(5), false, fixture_data());
+        assert_eq!((row.at, row.complete), (Duration::from_millis(5), false));
+        assert_eq!(row.summary, "NEC addr 0x00 cmd 0x59, NEC repeat x5");
+        assert!(row.pulses.is_some());
+    }
+
+    #[test]
+    fn import_appends_rows_within_the_limit() {
+        let mut log = CaptureLog::new(1 << 20);
+        log.apply(&transfer(1, recorder::Event::Out(vec![1])));
+        let t = TransferRow { at: Duration::from_millis(2), direction: Direction::In, bytes: vec![2], error: None };
+        let s = SignalRow::from_learned(Duration::from_millis(3), true, vec![0x23, 0x37]);
+        assert_eq!(log.import(vec![s.clone()], vec![t.clone()]), 2);
+        assert_eq!(log.transfer_count(), 2);
+        assert_eq!(log.transfer(1), Some(&t));
+        assert_eq!(log.signal(0), Some(&s));
+
+        let mut small = CaptureLog::new(ROW_OVERHEAD as u64 + 1);
+        assert_eq!(small.import(vec![], vec![t.clone(), t]), 1);
+        assert!(small.is_full());
     }
 
     #[test]
