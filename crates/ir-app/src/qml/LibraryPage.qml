@@ -1,11 +1,14 @@
 // LibraryPage.qml - the saved codes.
 //
 // A searchable list of codes with a tag filter (design decision 23). Each
-// row can be sent, edited (name, tags, carrier, repeat, notes) or deleted.
-// All changes go through the LibraryModel singleton, which saves at once.
+// row can be sent, edited (name, tags, carrier, repeat, notes), copied as
+// Pronto hex or deleted. All changes go through the LibraryModel singleton,
+// which saves at once. Import adds codes from Flipper, LIRC or Pronto files;
+// Export writes the shown codes as LIRC or Flipper files.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import QtQuick.Dialogs as Dialogs
 import org.kde.kirigami as Kirigami
 import io.github.ueda.irtransceiver
 
@@ -14,8 +17,68 @@ Kirigami.ScrollablePage {
 
     title: i18nc("@title", "Library")
 
+    actions: [
+        Kirigami.Action {
+            text: i18nc("@action:button", "Import…")
+            icon.name: "document-import"
+            onTriggered: importDialog.open()
+        },
+        Kirigami.Action {
+            text: i18nc("@action:button", "Export")
+            icon.name: "document-export"
+            enabled: list.count > 0
+
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "LIRC config…")
+                onTriggered: exportDialog.ask("lirc", "conf", i18nc("@item:inlistbox", "LIRC configs (*.conf)"))
+            }
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "Flipper file…")
+                onTriggered: exportDialog.ask("flipper", "ir", i18nc("@item:inlistbox", "Flipper IR files (*.ir)"))
+            }
+        }
+    ]
+
+    Dialogs.FileDialog {
+        id: importDialog
+        fileMode: Dialogs.FileDialog.OpenFile
+        nameFilters: [i18nc("@item:inlistbox", "IR code files (*.ir *.conf *.txt)"), i18nc("@item:inlistbox", "All files (*)")]
+        onAccepted: if (FileActions.importLibrary(selectedFile)) LibraryModel.reload()
+    }
+
+    Dialogs.FileDialog {
+        id: exportDialog
+        property string format: ""
+        function ask(format, suffix, filter) {
+            exportDialog.format = format;
+            defaultSuffix = suffix;
+            nameFilters = [filter];
+            open();
+        }
+        fileMode: Dialogs.FileDialog.SaveFile
+        onAccepted: FileActions.exportLibrary(selectedFile, format, LibraryModel.query, LibraryModel.tag)
+    }
+
+    // QML has no clipboard API; a hidden text field copies through Qt.
+    Controls.TextField {
+        id: clipboardHelper
+        visible: false
+    }
+
     header: ColumnLayout {
         spacing: 0
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: FileActions.message !== ""
+            type: FileActions.ok ? Kirigami.MessageType.Positive : Kirigami.MessageType.Error
+            text: FileActions.message
+            actions: Kirigami.Action {
+                text: i18nc("@action:button", "Dismiss")
+                icon.name: "dialog-close"
+                onTriggered: FileActions.message = ""
+            }
+        }
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true
@@ -114,6 +177,21 @@ Kirigami.ScrollablePage {
                     text: i18nc("@action:button", "Edit")
                     icon.name: "document-edit"
                     onClicked: if (LibraryModel.beginEdit(row.codeId)) editDialog.open()
+                }
+                Controls.Button {
+                    icon.name: "edit-copy"
+                    display: Controls.AbstractButton.IconOnly
+                    text: i18nc("@action:button", "Copy as Pronto hex")
+                    Controls.ToolTip.text: text
+                    Controls.ToolTip.visible: hovered
+                    onClicked: {
+                        const hex = FileActions.prontoForCode(row.codeId);
+                        if (hex !== "") {
+                            clipboardHelper.text = hex;
+                            clipboardHelper.selectAll();
+                            clipboardHelper.copy();
+                        }
+                    }
                 }
                 Controls.Button {
                     icon.name: "edit-delete"

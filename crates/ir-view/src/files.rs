@@ -120,6 +120,21 @@ pub fn import(text: &str, path: &Path) -> Result<Vec<NewCode>, String> {
     }
 }
 
+/// Confirmation after an export, naming skipped entries.
+pub fn export_message(path: &Path, skipped: &[String]) -> String {
+    let mut message = format!("Exported to {}.", path.display());
+    if !skipped.is_empty() {
+        message.push_str(&format!(" Skipped because they have no pulse timings: {}.", skipped.join(", ")));
+    }
+    message
+}
+
+/// Confirmation after an import.
+pub fn import_message(count: usize, path: &Path) -> String {
+    let codes = if count == 1 { "code" } else { "codes" };
+    format!("Imported {count} {codes} from {}.", path.display())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,6 +157,17 @@ mod tests {
 
     fn item() -> Item {
         Item { name: "A".into(), pulses: vec![Pulse { on_us: 560, off_us: 560 }], carrier_hz: 38_000, nec: None }
+    }
+
+    #[test]
+    fn messages() {
+        assert_eq!(export_message(Path::new("/x/a.ir"), &[]), "Exported to /x/a.ir.");
+        assert_eq!(
+            export_message(Path::new("/x/a.ir"), &["Raw".into(), "signal 2".into()]),
+            "Exported to /x/a.ir. Skipped because they have no pulse timings: Raw, signal 2."
+        );
+        assert_eq!(import_message(1, Path::new("/x/tv.conf")), "Imported 1 code from /x/tv.conf.");
+        assert_eq!(import_message(3, Path::new("/x/tv.conf")), "Imported 3 codes from /x/tv.conf.");
     }
 
     #[test]

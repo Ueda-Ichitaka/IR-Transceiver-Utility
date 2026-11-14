@@ -11,6 +11,7 @@
 pub mod app_info;
 pub mod capture_model;
 pub mod device_controller;
+pub mod file_actions;
 pub mod library_model;
 pub mod send_controller;
 pub mod state;

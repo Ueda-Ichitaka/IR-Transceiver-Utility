@@ -80,6 +80,9 @@ pub mod qobject {
         #[qsignal]
         fn library_changed(self: Pin<&mut LibraryModel>);
 
+        /// Re-reads the shown codes after the library changed elsewhere.
+        #[qinvokable]
+        fn reload(self: Pin<&mut LibraryModel>);
         /// Saves captured signal `row` as a new code; returns its id or -1.
         #[qinvokable]
         fn save_signal(self: Pin<&mut LibraryModel>, row: i32) -> i32;
@@ -189,6 +192,11 @@ impl qobject::LibraryModel {
         let message = saved.as_ref().err().cloned().unwrap_or_default();
         self.set_error(QString::from(&message));
         saved.is_ok()
+    }
+
+    fn reload(mut self: Pin<&mut Self>) {
+        self.as_mut().refresh();
+        self.library_changed();
     }
 
     fn set_query(mut self: Pin<&mut Self>, query: QString) {

@@ -1,12 +1,13 @@
 // CapturePage.qml - live capture with a Signals tab and a Transfers tab.
 //
 // Learn once / Start / Stop / Clear act on the dongle through the
-// DeviceController singleton. Each tab is a ListView over its own
+// DeviceController singleton; Export writes the capture through FileActions. Each tab is a ListView over its own
 // CaptureModel with its own encoding switch; rows are appended as the
 // session reports them (captureChanged -> sync).
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import QtQuick.Dialogs as Dialogs
 import org.kde.kirigami as Kirigami
 import io.github.ueda.irtransceiver
 
@@ -38,6 +39,33 @@ Kirigami.Page {
             onTriggered: DeviceController.stopCapture()
         },
         Kirigami.Action {
+            text: i18nc("@action:button", "Export")
+            icon.name: "document-export"
+            enabled: DeviceController.signalCount > 0 || DeviceController.transferCount > 0
+
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "JSON (signals and transfers)…")
+                onTriggered: exportDialog.ask("json", "json", i18nc("@item:inlistbox", "JSON files (*.json)"))
+            }
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "CSV (current tab)…")
+                onTriggered: exportDialog.ask(tabs.currentIndex === 0 ? "signals-csv" : "transfers-csv", "csv",
+                    i18nc("@item:inlistbox", "CSV files (*.csv)"))
+            }
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "Received bytes (.bin)…")
+                onTriggered: exportDialog.ask("bin", "bin", i18nc("@item:inlistbox", "Binary files (*.bin)"))
+            }
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "Signals as LIRC config…")
+                onTriggered: exportDialog.ask("lirc", "conf", i18nc("@item:inlistbox", "LIRC configs (*.conf)"))
+            }
+            Kirigami.Action {
+                text: i18nc("@action:inmenu", "Signals as Flipper file…")
+                onTriggered: exportDialog.ask("flipper", "ir", i18nc("@item:inlistbox", "Flipper IR files (*.ir)"))
+            }
+        },
+        Kirigami.Action {
             text: i18nc("@action:button", "Clear")
             icon.name: "edit-clear-history"
             enabled: DeviceController.signalCount > 0 || DeviceController.transferCount > 0
@@ -51,6 +79,19 @@ Kirigami.Page {
             signalModel.sync();
             transferModel.sync();
         }
+    }
+
+    Dialogs.FileDialog {
+        id: exportDialog
+        property string format: ""
+        function ask(format, suffix, filter) {
+            exportDialog.format = format;
+            defaultSuffix = suffix;
+            nameFilters = [filter];
+            open();
+        }
+        fileMode: Dialogs.FileDialog.SaveFile
+        onAccepted: FileActions.exportCapture(selectedFile, format)
     }
 
     CaptureModel {
@@ -76,11 +117,26 @@ Kirigami.Page {
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true
+            visible: FileActions.message !== ""
+            type: FileActions.ok ? Kirigami.MessageType.Positive : Kirigami.MessageType.Error
+            text: FileActions.message
+            actions: Kirigami.Action {
+                text: i18nc("@action:button", "Dismiss")
+                icon.name: "dialog-close"
+                onTriggered: FileActions.message = ""
+            }
+        }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
             visible: DeviceController.lastError !== ""
             type: Kirigami.MessageType.Warning
             text: DeviceController.lastError
-            showCloseButton: true
-            onVisibleChanged: if (!visible && DeviceController.lastError !== "") DeviceController.clearError()
+            actions: Kirigami.Action {
+                text: i18nc("@action:button", "Dismiss")
+                icon.name: "dialog-close"
+                onTriggered: DeviceController.clearError()
+            }
         }
 
         RowLayout {

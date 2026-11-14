@@ -2,7 +2,8 @@
 //
 // Shows time, kind, length and the data column of a CaptureModel; with
 // showSummary also the protocol description and the Save to library and
-// Send again buttons (Signals tab). Every row can copy its data column.
+// Send again and Copy as Pronto buttons (Signals tab). Every row can copy
+// its data column.
 // Follows the end of the list while the user has not scrolled up.
 import QtQuick
 import QtQuick.Layouts
@@ -101,6 +102,18 @@ Controls.ScrollView {
                         Controls.ToolTip.text: text
                         Controls.ToolTip.visible: hovered
                         onClicked: DeviceController.sendSignal(row.index)
+                    }
+                    Controls.ToolButton {
+                        visible: scroll.showSummary
+                        icon.name: "edit-copy"
+                        text: i18nc("@action:button", "Copy as Pronto hex")
+                        display: Controls.AbstractButton.IconOnly
+                        Controls.ToolTip.text: text
+                        Controls.ToolTip.visible: hovered
+                        onClicked: {
+                            const hex = FileActions.prontoForSignal(row.index);
+                            if (hex !== "") scroll.copy(hex);
+                        }
                     }
                     Controls.ToolButton {
                         icon.name: "edit-copy"

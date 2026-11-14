@@ -14,6 +14,6 @@ fn main() {
             "src/qml/LibraryPage.qml",
         ]),
     )
-    .files(["src/app_info.rs", "src/capture_model.rs", "src/device_controller.rs", "src/send_controller.rs", "src/library_model.rs"])
+    .files(["src/app_info.rs", "src/capture_model.rs", "src/device_controller.rs", "src/send_controller.rs", "src/library_model.rs", "src/file_actions.rs"])
     .build();
 }

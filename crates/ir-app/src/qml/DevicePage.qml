@@ -39,8 +39,11 @@ Kirigami.ScrollablePage {
             visible: DeviceController.lastError !== ""
             type: Kirigami.MessageType.Warning
             text: DeviceController.lastError
-            showCloseButton: true
-            onVisibleChanged: if (!visible && DeviceController.lastError !== "") DeviceController.clearError()
+            actions: Kirigami.Action {
+                text: i18nc("@action:button", "Dismiss")
+                icon.name: "dialog-close"
+                onTriggered: DeviceController.clearError()
+            }
         }
 
         Kirigami.FormLayout {
