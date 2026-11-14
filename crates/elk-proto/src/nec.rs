@@ -74,8 +74,14 @@ fn push_frame(pulses: &mut Vec<Pulse>, bytes: [u8; 4], order: BitOrder) {
 pub fn encode_command(address: u16, command: u8, extended: bool) -> Vec<Pulse> {
     let [low, high] = address.to_le_bytes();
     let second = if extended { high } else { !low };
+    encode_raw([low, second, command, !command])
+}
+
+/// Encodes one standard (LSB first) frame from four raw bytes, without any
+/// complement rule (Flipper's NECext stores a 16-bit command this way).
+pub fn encode_raw(bytes: [u8; 4]) -> Vec<Pulse> {
     let mut pulses = Vec::with_capacity(34);
-    push_frame(&mut pulses, [low, second, command, !command], BitOrder::LsbFirst);
+    push_frame(&mut pulses, bytes, BitOrder::LsbFirst);
     pulses
 }
 
@@ -209,6 +215,16 @@ mod tests {
             let frame = encode_command(address, 0x59, extended);
             assert_eq!(decode(&frame), Some(NecFrame::Command { address, command: 0x59, extended }));
         }
+    }
+
+    #[test]
+    fn encode_raw_sends_bytes_unchanged() {
+        let frame = encode_raw([0x00, 0xEF, 0x03, 0xFC]);
+        assert_eq!(decode(&frame), Some(NecFrame::Command { address: 0xEF00, command: 0x03, extended: true }));
+        assert_eq!(encode_raw([0x04, 0xFB, 0x08, 0xF7]), encode_command(0x04, 0x08, false));
+        let unchecked = encode_raw([0xEE, 0x87, 0x5D, 0xA0]);
+        assert_eq!(unchecked.len(), 34);
+        assert_eq!(decode(&unchecked), None, "command bytes are not complements");
     }
 
     #[test]
