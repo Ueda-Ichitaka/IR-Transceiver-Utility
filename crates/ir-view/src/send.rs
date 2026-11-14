@@ -97,6 +97,30 @@ pub fn parse_hex(text: &str, max: u32) -> Result<u32, String> {
     Ok(value)
 }
 
+/// Parses a carrier override in Hz; `None` when the text is empty.
+pub fn parse_carrier(text: &str) -> Result<Option<u32>, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    let hz: u32 = text.parse().map_err(|_| format!("carrier: {text:?} is not a number of Hz"))?;
+    if !(1..=MAX_CARRIER_HZ).contains(&hz) {
+        return Err(format!("carrier: must be between 1 and {MAX_CARRIER_HZ} Hz"));
+    }
+    Ok(Some(hz))
+}
+
+/// The session command that sends `code`, with `defaults` for its unset
+/// carrier and repeat mode.
+pub fn command_for(code: &Code, defaults: &Defaults) -> Result<Command, String> {
+    match send::prepare(code, defaults) {
+        Ok(Prepared::Pulses { pulses, carrier_hz }) => Ok(Command::Transmit { pulses, frequency_hz: carrier_hz }),
+        Ok(Prepared::Raw(bytes)) => Ok(Command::TransmitRaw { bytes }),
+        Err(PrepareError::Empty) => Err("nothing to send".into()),
+        Err(PrepareError::UndecodableLearnedData) => Err("the learned bytes do not decode into pulses".into()),
+    }
+}
+
 impl SendForm {
     /// The payload described by the form.
     pub fn payload(&self) -> Result<Payload, String> {
@@ -114,19 +138,6 @@ impl SendForm {
         })
     }
 
-    /// Carrier override; `None` when the field is empty.
-    fn carrier(&self) -> Result<Option<u32>, String> {
-        let text = self.carrier_text.trim();
-        if text.is_empty() {
-            return Ok(None);
-        }
-        let hz: u32 = text.parse().map_err(|_| format!("carrier: {text:?} is not a number of Hz"))?;
-        if !(1..=MAX_CARRIER_HZ).contains(&hz) {
-            return Err(format!("carrier: must be between 1 and {MAX_CARRIER_HZ} Hz"));
-        }
-        Ok(Some(hz))
-    }
-
     /// The command to send, with `defaults` for unset carrier and repeat.
     pub fn command(&self, defaults: &Defaults) -> Result<Command, String> {
         let payload = self.payload()?;
@@ -137,17 +148,12 @@ impl SendForm {
             id: 0,
             name: String::new(),
             tags: Vec::new(),
-            carrier_hz: self.carrier()?,
+            carrier_hz: parse_carrier(&self.carrier_text)?,
             repeat: self.repeat,
             payload,
             notes: String::new(),
         };
-        match send::prepare(&code, defaults) {
-            Ok(Prepared::Pulses { pulses, carrier_hz }) => Ok(Command::Transmit { pulses, frequency_hz: carrier_hz }),
-            Ok(Prepared::Raw(bytes)) => Ok(Command::TransmitRaw { bytes }),
-            Err(PrepareError::Empty) => Err("nothing to send".into()),
-            Err(PrepareError::UndecodableLearnedData) => Err("the learned bytes do not decode into pulses".into()),
-        }
+        command_for(&code, defaults)
     }
 }
 
